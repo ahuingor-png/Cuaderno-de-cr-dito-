@@ -40,7 +40,7 @@ button.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
 .st b{font-size:1.1rem;margin-top:2px}
 .st small{font-size:.64rem}
 .sk{margin:0 0 4px;font-size:.66rem}
-.stk{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+.stk{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px}
 .stk div{display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 2px;border-radius:14px;background:var(--sf);color:var(--ink);border:1px solid var(--ln);font-size:.62rem;font-weight:600}
 .stk div span{font-size:1.05rem}
 .stk div b{font-size:1.2rem;line-height:1.1}
@@ -61,7 +61,7 @@ button.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
 .main{display:grid;gap:14px}
 label{display:block;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin:12px 0 5px}
 .row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
-.prods{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.prods{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .prods button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:14px;background:var(--bg);color:var(--ink);border:1px solid var(--ln);font-size:.66rem}
 .prods button span{font-size:1.25rem}
 .prods button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -138,7 +138,7 @@ details.menu summary::-webkit-details-marker{display:none}
 <header>
   <div>
     <h1 class="disp">📒 Cuaderno de Créditos</h1>
-    <small>Refrescos · Marcianos · Gelatinas · Golosinas</small><br><small id="net"></small>
+    <small>Refrescos · Marcianos · Gelatinas · Gaseosas · Golosinas</small><br><small id="net"></small>
   </div>
   <details class="menu" id="menu"><summary>⋯ Más</summary>
     <div class="mp">
@@ -264,7 +264,7 @@ details.menu summary::-webkit-details-marker{display:none}
 
 <script>
 const KEY='cuaderno_creditos_v2';
-const PRODS=[{k:'Refrescos',e:'🥤',p:1.5},{k:'Marcianos',e:'🧊',p:2},{k:'Gelatinas',e:'🍮',p:1},{k:'Golosinas',e:'🍬',p:null}];
+const PRODS=[{k:'Refrescos',e:'🥤',p:1.5},{k:'Marcianos',e:'🧊',p:2},{k:'Gelatinas',e:'🍮',p:1},{k:'Gaseosas',e:'🥫',p:3.5},{k:'Golosinas',e:'🍬',p:null}];
 let S={entries:[],pays:[],sales:[],stock:{},cur:'S/'};
 try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.entries)){S=Object.assign(S,r);delete S.prices}}catch(e){}
 if(!Array.isArray(S.sales))S.sales=[];if(!S.stock||typeof S.stock!=='object')S.stock={};
@@ -742,7 +742,7 @@ function inlineIcons(){
           const page=location.origin+location.pathname;
           const icons=[{src:ICON512,sizes:'512x512',type:'image/png',purpose:'any maskable'}];
           if(i192)icons.unshift({src:i192,sizes:'192x192',type:'image/png'});
-          const m={name:'Cuaderno de Créditos',short_name:'Créditos',description:'Anota lo que fías: refrescos, marcianos, gelatinas y golosinas.',lang:'es',id:page,start_url:page,scope:location.origin+location.pathname.replace(/[^/]*$/,''),display:'standalone',background_color:'#ffffff',theme_color:'#021f68',icons};
+          const m={name:'Cuaderno de Créditos',short_name:'Créditos',description:'Anota lo que fías: refrescos, marcianos, gelatinas, gaseosas y golosinas.',lang:'es',id:page,start_url:page,scope:location.origin+location.pathname.replace(/[^/]*$/,''),display:'standalone',background_color:'#ffffff',theme_color:'#021f68',icons};
           setLink('manifest',URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/manifest+json'})));
         });
     };
