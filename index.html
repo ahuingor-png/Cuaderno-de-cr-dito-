@@ -40,7 +40,7 @@ button.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
 .st b{font-size:1.1rem;margin-top:2px}
 .st small{font-size:.64rem}
 .sk{margin:0 0 4px;font-size:.66rem}
-.stk{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px}
+.stk{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
 .stk div{display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 2px;border-radius:14px;background:var(--sf);color:var(--ink);border:1px solid var(--ln);font-size:.62rem;font-weight:600}
 .stk div span{font-size:1.05rem}
 .stk div b{font-size:1.2rem;line-height:1.1}
@@ -65,6 +65,10 @@ label{display:block;font-size:.72rem;font-weight:700;text-transform:uppercase;le
 .prods button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:14px;background:var(--bg);color:var(--ink);border:1px solid var(--ln);font-size:.66rem}
 .prods button span{font-size:1.25rem}
 .prods button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.prods.bsub{grid-template-columns:repeat(3,1fr);margin-top:6px}
+.prods.bsub:empty{display:none}
+.prods.bsub button{font-size:.72rem;font-weight:700}
+.prods.bsub button small{font-weight:400}
 .qty{display:flex;align-items:center;border:1px solid var(--ln);border-radius:12px;background:var(--bg);overflow:hidden}
 .qty button{border-radius:0;background:transparent;color:var(--ink);padding:10px 14px;font-size:1.1rem}
 .qty input{border:0;text-align:center;font-weight:700;border-radius:0;padding:10px 0}
@@ -138,7 +142,7 @@ details.menu summary::-webkit-details-marker{display:none}
 <header>
   <div>
     <h1 class="disp">📒 Cuaderno de Créditos</h1>
-    <small>Refrescos · Marcianos · Gelatinas · Gaseosas · Golosinas</small><br><small id="net"></small>
+    <small>Refrescos · Marcianos · Gelatinas · Bebidas · Golosinas</small><br><small id="net"></small>
   </div>
   <details class="menu" id="menu"><summary>⋯ Más</summary>
     <div class="mp">
@@ -177,6 +181,7 @@ details.menu summary::-webkit-details-marker{display:none}
 
     <label>Producto</label>
     <div class="prods" id="prods"></div>
+    <div class="prods bsub" id="bsub"></div>
 
     <div class="row">
       <div><label>Cantidad</label>
@@ -221,6 +226,7 @@ details.menu summary::-webkit-details-marker{display:none}
   <div class="card sc">
     <h3 class="disp">💵 Venta al contado</h3>
     <div class="prods" id="cprods"></div>
+    <div class="prods bsub" id="cbsub"></div>
     <div class="row">
       <div><label>Cantidad</label>
         <div class="qty"><button type="button" data-cq="-1">−</button><input id="cq" type="number" inputmode="numeric" min="0" value="1"><button type="button" data-cq="1">+</button></div></div>
@@ -264,7 +270,13 @@ details.menu summary::-webkit-details-marker{display:none}
 
 <script>
 const KEY='cuaderno_creditos_v2';
-const PRODS=[{k:'Refrescos',e:'🥤',p:1.5},{k:'Marcianos',e:'🧊',p:2},{k:'Gelatinas',e:'🍮',p:1},{k:'Gaseosas',e:'🥫',p:3.5},{k:'Golosinas',e:'🍬',p:null}];
+/* ITEMS = cada producto que se vende (cada uno con su propio stock). PRODS = botones que se ven; "Bebidas" abre 3 opciones. */
+const ITEMS=[{k:'Refrescos',e:'🥤',p:1.5},{k:'Marcianos',e:'🧊',p:2},{k:'Gelatinas',e:'🍮',p:1},{k:'Gaseosa',e:'🥫',p:3.5},{k:'Del Valle',e:'🧃',p:2},{k:'Agua',e:'💧',p:1.5},{k:'Golosinas',e:'🍬',p:null}];
+const BEB=['Gaseosa','Del Valle','Agua'];
+const PRODS=[ITEMS[0],ITEMS[1],ITEMS[2],{k:'Bebidas',e:'🧃',p:null,g:BEB},ITEMS[6]];
+const isBeb=k=>BEB.includes(k);
+const al=k=>k==='Gaseosas'?'Gaseosa':k; /* registros viejos de "Gaseosas" cuentan como "Gaseosa" */
+const item=k=>ITEMS.find(p=>p.k===k);
 let S={entries:[],pays:[],sales:[],stock:{},cur:'S/'};
 try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.entries)){S=Object.assign(S,r);delete S.prices}}catch(e){}
 if(!Array.isArray(S.sales))S.sales=[];if(!S.stock||typeof S.stock!=='object')S.stock={};
@@ -278,7 +290,7 @@ const fmtD=s=>{const p=(s||'').split('-');return p.length===3?p[2]+'/'+p[1]+'/'+
 const clean=s=>s.trim().replace(/\s+/g,' ');
 const nk=s=>clean(s).toLowerCase();
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const priceOf=k=>PRODS.find(p=>p.k===k).p;
+const priceOf=k=>item(k).p;
 const pcVal=k=>priceOf(k)==null?'':priceOf(k);
 const fixed=k=>priceOf(k)!=null;
 let prod='Marcianos',open=new Set(),addOpen=new Set(),armed=null,armT,tt;
@@ -371,8 +383,12 @@ $('gno').onclick=()=>{
 };
 
 /* ---------- formulario ---------- */
+const bebHtml=(sel,attr)=>BEB.map(k=>{const it=item(k),l=left(k);
+  return `<button type="button" ${attr}="${k}" class="${k===sel?'on':''}"><span>${it.e}</span>${k}<small style="color:inherit;opacity:.85">${S.cur+' '+it.p.toFixed(2)}</small><small style="color:inherit;opacity:.6">${l==null?'':'Quedan '+Math.max(l,0)}</small></button>`}).join('');
 function drawProds(){
-  $('prods').innerHTML=PRODS.map(p=>`<button type="button" data-p="${p.k}" class="${p.k===prod?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.p==null?'editable':S.cur+' '+p.p.toFixed(2)}</small></button>`).join('');
+  $('prods').innerHTML=PRODS.map(p=>{const on=p.g?isBeb(prod):p.k===prod;
+    return `<button type="button" data-p="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?'3 precios':p.p==null?'editable':S.cur+' '+p.p.toFixed(2)}</small></button>`}).join('');
+  $('bsub').innerHTML=isBeb(prod)?bebHtml(prod,'data-p'):'';
 }
 function calc(){
   const q=parseInt($('qt').value)||0,p=parseFloat($('pc').value);
@@ -380,7 +396,8 @@ function calc(){
   $('pv').textContent=q+' × '+fmt(pr);
   $('st').textContent=fmt(q*pr);
 }
-$('prods').onclick=e=>{const b=e.target.closest('[data-p]');if(!b)return;prod=b.dataset.p;$('pc').value=pcVal(prod);$('pc').readOnly=fixed(prod);drawProds();calc()};
+const pickP=e=>{const b=e.target.closest('[data-p]');if(!b)return;let k=b.dataset.p;if(k==='Bebidas')k=isBeb(prod)?prod:BEB[0];prod=k;$('pc').value=pcVal(prod);$('pc').readOnly=fixed(prod);drawProds();calc()};
+$('prods').onclick=pickP;$('bsub').onclick=pickP;
 document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('qt').value=Math.max(0,(parseInt($('qt').value)||0)+parseInt(b.dataset.q));calc()});
 $('qt').oninput=calc;$('pc').oninput=calc;
 $('add').onclick=add;
@@ -416,7 +433,7 @@ function groups(){
   return [...m.values()];
 }
 
-const qaHtml=x=>`<div class="qa"><small>➕ Agregar más a ${esc(x.name)}</small><select data-qp>${PRODS.map(p=>`<option value="${p.k}">${p.e} ${p.k}</option>`).join('')}</select><div class="qty"><button type="button" data-act="qm">−</button><input type="number" inputmode="numeric" min="1" value="1" data-qq aria-label="Cantidad"><button type="button" data-act="qp">+</button></div><input type="number" inputmode="decimal" min="0" step="0.1" value="${pcVal(PRODS[0].k)}" ${fixed(PRODS[0].k)?'readonly':''} data-qpr placeholder="Precio" aria-label="Precio"><button data-act="qadd" data-k="${esc(x.k)}">Agregar</button></div>`;
+const qaHtml=x=>`<div class="qa"><small>➕ Agregar más a ${esc(x.name)}</small><select data-qp>${ITEMS.map(p=>`<option value="${p.k}">${p.e} ${p.k}</option>`).join('')}</select><div class="qty"><button type="button" data-act="qm">−</button><input type="number" inputmode="numeric" min="1" value="1" data-qq aria-label="Cantidad"><button type="button" data-act="qp">+</button></div><input type="number" inputmode="decimal" min="0" step="0.1" value="${pcVal(PRODS[0].k)}" ${fixed(PRODS[0].k)?'readonly':''} data-qpr placeholder="Precio" aria-label="Precio"><button data-act="qadd" data-k="${esc(x.k)}">Agregar</button></div>`;
 function card(x){
   const o=open.has(x.k);
   const ini=x.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
@@ -506,10 +523,11 @@ const onSel=ev=>{const s=ev.target.closest('[data-qp]');if(!s)return;const i=s.c
 $('list').onchange=onSel;$('plist').onchange=onSel;
 
 /* ---------- stock y ventas al contado ---------- */
-const sold=k=>S.entries.reduce((a,e)=>a+(e.prod===k?e.qty:0),0)+S.sales.reduce((a,e)=>a+(e.prod===k?e.qty:0),0);
-const left=k=>S.stock[k]==null?null:S.stock[k]-sold(k);
+const sold=k=>S.entries.reduce((a,e)=>a+(al(e.prod)===k?e.qty:0),0)+S.sales.reduce((a,e)=>a+(al(e.prod)===k?e.qty:0),0);
+const stk0=k=>S.stock[k]!=null?S.stock[k]:(k==='Gaseosa'?S.stock['Gaseosas']:undefined);
+const left=k=>stk0(k)==null?null:stk0(k)-sold(k);
 function drawStock(){
-  $('stk').innerHTML=PRODS.map(p=>{const l=left(p.k),c=l==null?'':l<=0?'zero':l<=5?'lo':'';
+  $('stk').innerHTML=ITEMS.map(p=>{const l=left(p.k),c=l==null?'':l<=0?'zero':l<=5?'lo':'';
     return `<div class="${c}"><span>${p.e}</span><b>${l==null?'—':l}</b>${p.k}</div>`}).join('');
   const td=S.sales.filter(x=>x.date===today());
   $('cashb').innerHTML='<span>💵 Venta al contado</span><b>Hoy '+fmt(td.reduce((a,x)=>a+x.sub,0))+'</b>';
@@ -522,7 +540,7 @@ function warnStock(pd,qty){
 }
 $('skb').onclick=openStock;
 function openStock(){
-  $('skrows').innerHTML=PRODS.map(p=>{const l=left(p.k);
+  $('skrows').innerHTML=ITEMS.map(p=>{const l=left(p.k);
     return `<div class="srow"><span>${p.e} ${p.k}<small>${l==null?'Sin definir':'Quedan '+l}</small></span><input type="number" inputmode="numeric" min="0" step="1" data-sk="${p.k}" value="${l==null?'':Math.max(l,0)}" placeholder="Tengo"></div>`}).join('');
   $('skm').hidden=false;
 }
@@ -543,15 +561,17 @@ let cprod='Refrescos';
 $('cashb').onclick=()=>{cprod=cprod||'Refrescos';$('cq').value=1;$('cp').value=pcVal(cprod);$('cp').readOnly=fixed(cprod);$('cash').hidden=false;drawCash()};
 $('cclose').onclick=()=>{$('cash').hidden=true};
 function drawCash(){
-  $('cprods').innerHTML=PRODS.map(p=>{const l=left(p.k);
-    return `<button type="button" data-cp="${p.k}" class="${p.k===cprod?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${l==null?(p.p==null?'editable':S.cur+' '+p.p.toFixed(2)):'Quedan '+l}</small></button>`}).join('');
+  $('cprods').innerHTML=PRODS.map(p=>{const l=p.g?null:left(p.k),on=p.g?isBeb(cprod):p.k===cprod;
+    return `<button type="button" data-cp="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?'3 precios':l==null?(p.p==null?'editable':S.cur+' '+p.p.toFixed(2)):'Quedan '+l}</small></button>`}).join('');
+  $('cbsub').innerHTML=isBeb(cprod)?bebHtml(cprod,'data-cp'):'';
   const q=parseInt($('cq').value)||0,pv=parseFloat($('cp').value),pr=fixed(cprod)?priceOf(cprod):(isNaN(pv)?0:pv);
   $('cpv').textContent=q+' × '+fmt(pr);$('cst').textContent=fmt(q*pr);
   const td=S.sales.filter(x=>x.date===today()).sort((a,b)=>String(b.id).localeCompare(String(a.id)));
   $('ctot').textContent=td.length?td.reduce((a,x)=>a+x.qty,0)+' unidades · '+fmt(td.reduce((a,x)=>a+x.sub,0)):'Aún no hay ventas hoy';
   $('clist').innerHTML=td.map(x=>`<div class="mv"><div><b>${x.qty} × ${esc(x.prod)}</b><small>${x.qty} × ${fmt(x.price)}</small></div><div class="amt p">${fmt(x.sub)}</div><button class="gh ${armed===x.id?'armed':''}" data-cd="${x.id}">${armed===x.id?'¿Seguro?':'✕'}</button></div>`).join('');
 }
-$('cprods').onclick=e=>{const b=e.target.closest('[data-cp]');if(!b)return;cprod=b.dataset.cp;$('cp').value=pcVal(cprod);$('cp').readOnly=fixed(cprod);drawCash()};
+const pickC=e=>{const b=e.target.closest('[data-cp]');if(!b)return;let k=b.dataset.cp;if(k==='Bebidas')k=isBeb(cprod)?cprod:BEB[0];cprod=k;$('cp').value=pcVal(cprod);$('cp').readOnly=fixed(cprod);drawCash()};
+$('cprods').onclick=pickC;$('cbsub').onclick=pickC;
 document.querySelectorAll('[data-cq]').forEach(b=>b.onclick=()=>{$('cq').value=Math.max(0,(parseInt($('cq').value)||0)+parseInt(b.dataset.cq));drawCash()});
 $('cq').oninput=drawCash;$('cp').oninput=drawCash;
 $('cadd').onclick=()=>{
@@ -620,8 +640,8 @@ let ovMode='all';
 function drawOv(){
   $('ov-t').className=ovMode==='day'?'':'gh';$('ov-a').className=ovMode==='all'?'':'gh';
   const f=x=>ovMode==='all'||x.date===today();
-  const rows=PRODS.map(p=>{
-    const c=S.sales.filter(x=>x.prod===p.k&&f(x)),r=S.entries.filter(x=>x.prod===p.k&&f(x));
+  const rows=ITEMS.map(p=>{
+    const c=S.sales.filter(x=>al(x.prod)===p.k&&f(x)),r=S.entries.filter(x=>al(x.prod)===p.k&&f(x));
     return {p,cq:c.reduce((a,x)=>a+x.qty,0),cm:c.reduce((a,x)=>a+x.sub,0),rq:r.reduce((a,x)=>a+x.qty,0),rm:r.reduce((a,x)=>a+x.sub,0),l:left(p.k)};
   });
   const T=rows.reduce((t,x)=>({cq:t.cq+x.cq,cm:t.cm+x.cm,rq:t.rq+x.rq,rm:t.rm+x.rm}),{cq:0,cm:0,rq:0,rm:0});
@@ -742,7 +762,7 @@ function inlineIcons(){
           const page=location.origin+location.pathname;
           const icons=[{src:ICON512,sizes:'512x512',type:'image/png',purpose:'any maskable'}];
           if(i192)icons.unshift({src:i192,sizes:'192x192',type:'image/png'});
-          const m={name:'Cuaderno de Créditos',short_name:'Créditos',description:'Anota lo que fías: refrescos, marcianos, gelatinas, gaseosas y golosinas.',lang:'es',id:page,start_url:page,scope:location.origin+location.pathname.replace(/[^/]*$/,''),display:'standalone',background_color:'#ffffff',theme_color:'#021f68',icons};
+          const m={name:'Cuaderno de Créditos',short_name:'Créditos',description:'Anota lo que fías: refrescos, marcianos, gelatinas, bebidas y golosinas.',lang:'es',id:page,start_url:page,scope:location.origin+location.pathname.replace(/[^/]*$/,''),display:'standalone',background_color:'#ffffff',theme_color:'#021f68',icons};
           setLink('manifest',URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/manifest+json'})));
         });
     };
