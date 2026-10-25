@@ -277,6 +277,7 @@ const PRODS=[ITEMS[0],ITEMS[1],ITEMS[2],{k:'Bebidas',e:'🧃',p:null,g:BEB},ITEM
 const isBeb=k=>BEB.includes(k);
 const al=k=>k==='Gaseosas'?'Gaseosa':k; /* registros viejos de "Gaseosas" cuentan como "Gaseosa" */
 const item=k=>ITEMS.find(p=>p.k===k);
+let bOpen=false,cbOpen=false; /* si las 3 opciones de Bebidas están desplegadas */
 let S={entries:[],pays:[],sales:[],stock:{},cur:'S/'};
 try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.entries)){S=Object.assign(S,r);delete S.prices}}catch(e){}
 if(!Array.isArray(S.sales))S.sales=[];if(!S.stock||typeof S.stock!=='object')S.stock={};
@@ -387,8 +388,8 @@ const bebHtml=(sel,attr)=>BEB.map(k=>{const it=item(k),l=left(k);
   return `<button type="button" ${attr}="${k}" class="${k===sel?'on':''}"><span>${it.e}</span>${k}<small style="color:inherit;opacity:.85">${S.cur+' '+it.p.toFixed(2)}</small><small style="color:inherit;opacity:.6">${l==null?'':'Quedan '+Math.max(l,0)}</small></button>`}).join('');
 function drawProds(){
   $('prods').innerHTML=PRODS.map(p=>{const on=p.g?isBeb(prod):p.k===prod;
-    return `<button type="button" data-p="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?'3 precios':p.p==null?'editable':S.cur+' '+p.p.toFixed(2)}</small></button>`}).join('');
-  $('bsub').innerHTML=isBeb(prod)?bebHtml(prod,'data-p'):'';
+    return `<button type="button" data-p="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?(on?prod+' '+item(prod).p.toFixed(2):'3 precios'):p.p==null?'editable':S.cur+' '+p.p.toFixed(2)}</small></button>`}).join('');
+  $('bsub').innerHTML=isBeb(prod)&&bOpen?bebHtml(prod,'data-p'):'';
 }
 function calc(){
   const q=parseInt($('qt').value)||0,p=parseFloat($('pc').value);
@@ -396,7 +397,7 @@ function calc(){
   $('pv').textContent=q+' × '+fmt(pr);
   $('st').textContent=fmt(q*pr);
 }
-const pickP=e=>{const b=e.target.closest('[data-p]');if(!b)return;let k=b.dataset.p;if(k==='Bebidas')k=isBeb(prod)?prod:BEB[0];prod=k;$('pc').value=pcVal(prod);$('pc').readOnly=fixed(prod);drawProds();calc()};
+const pickP=e=>{const b=e.target.closest('[data-p]');if(!b)return;let k=b.dataset.p;if(k==='Bebidas'){bOpen=isBeb(prod)?!bOpen:true;k=isBeb(prod)?prod:BEB[0]}else if(b.closest('#prods'))bOpen=false;prod=k;$('pc').value=pcVal(prod);$('pc').readOnly=fixed(prod);drawProds();calc()};
 $('prods').onclick=pickP;$('bsub').onclick=pickP;
 document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('qt').value=Math.max(0,(parseInt($('qt').value)||0)+parseInt(b.dataset.q));calc()});
 $('qt').oninput=calc;$('pc').oninput=calc;
@@ -562,15 +563,15 @@ $('cashb').onclick=()=>{cprod=cprod||'Refrescos';$('cq').value=1;$('cp').value=p
 $('cclose').onclick=()=>{$('cash').hidden=true};
 function drawCash(){
   $('cprods').innerHTML=PRODS.map(p=>{const l=p.g?null:left(p.k),on=p.g?isBeb(cprod):p.k===cprod;
-    return `<button type="button" data-cp="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?'3 precios':l==null?(p.p==null?'editable':S.cur+' '+p.p.toFixed(2)):'Quedan '+l}</small></button>`}).join('');
-  $('cbsub').innerHTML=isBeb(cprod)?bebHtml(cprod,'data-cp'):'';
+    return `<button type="button" data-cp="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?(on?cprod+' '+item(cprod).p.toFixed(2):'3 precios'):l==null?(p.p==null?'editable':S.cur+' '+p.p.toFixed(2)):'Quedan '+l}</small></button>`}).join('');
+  $('cbsub').innerHTML=isBeb(cprod)&&cbOpen?bebHtml(cprod,'data-cp'):'';
   const q=parseInt($('cq').value)||0,pv=parseFloat($('cp').value),pr=fixed(cprod)?priceOf(cprod):(isNaN(pv)?0:pv);
   $('cpv').textContent=q+' × '+fmt(pr);$('cst').textContent=fmt(q*pr);
   const td=S.sales.filter(x=>x.date===today()).sort((a,b)=>String(b.id).localeCompare(String(a.id)));
   $('ctot').textContent=td.length?td.reduce((a,x)=>a+x.qty,0)+' unidades · '+fmt(td.reduce((a,x)=>a+x.sub,0)):'Aún no hay ventas hoy';
   $('clist').innerHTML=td.map(x=>`<div class="mv"><div><b>${x.qty} × ${esc(x.prod)}</b><small>${x.qty} × ${fmt(x.price)}</small></div><div class="amt p">${fmt(x.sub)}</div><button class="gh ${armed===x.id?'armed':''}" data-cd="${x.id}">${armed===x.id?'¿Seguro?':'✕'}</button></div>`).join('');
 }
-const pickC=e=>{const b=e.target.closest('[data-cp]');if(!b)return;let k=b.dataset.cp;if(k==='Bebidas')k=isBeb(cprod)?cprod:BEB[0];cprod=k;$('cp').value=pcVal(cprod);$('cp').readOnly=fixed(cprod);drawCash()};
+const pickC=e=>{const b=e.target.closest('[data-cp]');if(!b)return;let k=b.dataset.cp;if(k==='Bebidas'){cbOpen=isBeb(cprod)?!cbOpen:true;k=isBeb(cprod)?cprod:BEB[0]}else if(b.closest('#cprods'))cbOpen=false;cprod=k;$('cp').value=pcVal(cprod);$('cp').readOnly=fixed(cprod);drawCash()};
 $('cprods').onclick=pickC;$('cbsub').onclick=pickC;
 document.querySelectorAll('[data-cq]').forEach(b=>b.onclick=()=>{$('cq').value=Math.max(0,(parseInt($('cq').value)||0)+parseInt(b.dataset.cq));drawCash()});
 $('cq').oninput=drawCash;$('cp').oninput=drawCash;
