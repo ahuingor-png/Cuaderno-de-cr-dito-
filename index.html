@@ -514,7 +514,13 @@ function onAct(ev){
       armed=null;if(commit({[(d.t==='c'?'entries/':'pays/')+d.id]:null}))toast('Borrado');break;
     case 'delp':{
       const pk='P'+k;if(armed!==pk){arm(pk);break}
-      const u={};S.entries.filter(e=>nk(e.name)===k).forEach(e=>u['entries/'+e.id]=null);S.pays.filter(p=>nk(p.name)===k).forEach(p=>u['pays/'+p.id]=null);
+      const u={};const mine=S.entries.filter(e=>nk(e.name)===k);
+      const settled=debtOf(k)<=0.004;
+      mine.forEach(e=>u['entries/'+e.id]=null);S.pays.filter(p=>nk(p.name)===k).forEach(p=>u['pays/'+p.id]=null);
+      /* Cuenta saldada: esos productos ya salieron, así que el stock NO debe subir al borrarla.
+         El stock disponible = stock base − vendido, por eso se baja el stock base lo mismo que se quita de lo vendido. */
+      if(settled){const q={};mine.forEach(e=>{const it=al(e.prod);q[it]=(q[it]||0)+(e.qty||0)});
+        for(const it in q){const b=stk0(it);if(b!=null)u['stock/'+it]=b-q[it]}}
       armed=null;if(commit(u)){open.delete(k);toast('Persona eliminada')}break}
   }
   render();
