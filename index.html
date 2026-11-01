@@ -134,6 +134,9 @@ details.menu summary::-webkit-details-marker{display:none}
 @keyframes sp-bn{0%,80%,100%{transform:scale(.45);opacity:.45}40%{transform:scale(1);opacity:1}}
 @keyframes sp-fade{from{opacity:.45}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){#splash img,#splash .ld i,#splash small{animation:none}}
+
+.stk div{overflow-wrap:anywhere;text-align:center}
+.prods.bsub button{overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -271,16 +274,22 @@ details.menu summary::-webkit-details-marker{display:none}
 <script>
 const KEY='cuaderno_creditos_v2';
 /* ITEMS = cada producto que se vende (cada uno con su propio stock). PRODS = botones que se ven; "Bebidas" abre 3 opciones. */
-const ITEMS=[{k:'Refrescos',e:'🥤',p:1.5},{k:'Marcianos',e:'🧊',p:2},{k:'Gelatinas',e:'🍮',p:1},{k:'Gaseosa',e:'🥫',p:3.5},{k:'Del Valle',e:'🧃',p:2},{k:'Agua',e:'💧',p:1.5},{k:'Golosinas',e:'🍬',p:null}];
-const BEB=['Gaseosa','Del Valle','Agua'];
-const PRODS=[ITEMS[0],ITEMS[1],ITEMS[2],{k:'Bebidas',e:'🧃',p:null,g:BEB},ITEMS[6]];
+const BASE=[{k:'Refrescos',e:'🥤',p:1.5},{k:'Marcianos',e:'🧊',p:2},{k:'Gelatinas',e:'🍮',p:1},{k:'Gaseosa',e:'🥫',p:3.5},{k:'Del Valle',e:'🧃',p:2},{k:'Agua',e:'💧',p:1.5},{k:'Golosinas',e:'🍬',p:null}];
+let ITEMS=BASE,BEB=['Gaseosa','Del Valle','Agua'],PRODS=[];
 const isBeb=k=>BEB.includes(k);
-const al=k=>k==='Gaseosas'?'Gaseosa':k; /* registros viejos de "Gaseosas" cuentan como "Gaseosa" */
+const gname=()=>S.gname||'Gaseosa';
+const al=k=>k==='Gaseosas'?gname():k; /* registros viejos de "Gaseosas" cuentan como "Gaseosa" */
 const item=k=>ITEMS.find(p=>p.k===k);
 let bOpen=false,cbOpen=false; /* si las 3 opciones de Bebidas están desplegadas */
-let S={entries:[],pays:[],sales:[],stock:{},cur:'S/'};
+let S={entries:[],pays:[],sales:[],stock:{},gas:[],gname:'',cur:'S/'};
 try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.entries)){S=Object.assign(S,r);delete S.prices}}catch(e){}
-if(!Array.isArray(S.sales))S.sales=[];if(!S.stock||typeof S.stock!=='object')S.stock={};
+if(!Array.isArray(S.sales))S.sales=[];if(!S.stock||typeof S.stock!=='object')S.stock={};if(!Array.isArray(S.gas))S.gas=[];
+/* Gaseosas extra (nombre + precio) que tú agregas; cada una con su propio stock */
+function rebuild(){const G={k:gname(),e:'🥫',p:3.5};const gv=[...S.gas].sort((a,b)=>String(a.id).localeCompare(String(b.id))).map(g=>({k:g.name,e:'🥫',p:g.price}));
+  ITEMS=[BASE[0],BASE[1],BASE[2],G,...gv,BASE[4],BASE[5],BASE[6]];
+  BEB=[G.k,...gv.map(x=>x.k),BASE[4].k,BASE[5].k];
+  PRODS=[BASE[0],BASE[1],BASE[2],{k:'Bebidas',e:'🧃',p:null,g:BEB},BASE[6]]}
+rebuild();
 const $=id=>document.getElementById(id);
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('⚠️ No se pudo guardar en este navegador')}};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -294,6 +303,8 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const priceOf=k=>item(k).p;
 const pcVal=k=>priceOf(k)==null?'':priceOf(k);
 const fixed=k=>priceOf(k)!=null;
+function fixSel(){if(!item(prod)){prod='Marcianos';$('pc').value=pcVal(prod);$('pc').readOnly=fixed(prod)}else if(fixed(prod))$('pc').value=pcVal(prod);
+  if(!item(cprod))cprod='Refrescos';else if(fixed(cprod))$('cp').value=pcVal(cprod)}
 let prod='Marcianos',open=new Set(),addOpen=new Set(),armed=null,armT,tt;
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2300)}
@@ -329,11 +340,12 @@ function commit(u){
   for(const p in u){
     const v=u[p],[c,id]=p.split('/');
     if(c==='cur'){S.cur=v||'S/';continue}
+    if(c==='gname'){S.gname=v||'';continue}
     if(c==='stock'){if(v==null)delete S.stock[id];else S.stock[id]=v;continue}
-    const a=c==='entries'?S.entries:c==='sales'?S.sales:S.pays,i=a.findIndex(x=>x.id===id);
+    const a=c==='entries'?S.entries:c==='sales'?S.sales:c==='gas'?S.gas:S.pays,i=a.findIndex(x=>x.id===id);
     if(v==null){if(i>=0)a.splice(i,1)}else if(i>=0)a[i]=v;else a.push(v);
   }
-  save();
+  rebuild();fixSel();save();
   if(CLOUD&&Object.keys(u).length)CLOUD.update(u);
   return true;
 }
@@ -344,14 +356,14 @@ function onSnap(snap){
   const arr=o=>o?Object.entries(o).map(([id,x])=>({...x,id})):[];
   if(!lsGet(MIG)){
     lsSet(MIG,'1');
-    if(!v.entries&&!v.pays&&!v.sales&&!v.stock&&(S.entries.length||S.pays.length||S.sales.length||Object.keys(S.stock).length)){
+    if(!v.entries&&!v.pays&&!v.sales&&!v.stock&&!v.gas&&(S.gas.length||S.entries.length||S.pays.length||S.sales.length||Object.keys(S.stock).length)){
       const u={cur:S.cur};
-      S.entries.forEach(e=>u['entries/'+e.id]=e);S.pays.forEach(p=>u['pays/'+p.id]=p);S.sales.forEach(x=>u['sales/'+x.id]=x);for(const k in S.stock)u['stock/'+k]=S.stock[k];
+      S.entries.forEach(e=>u['entries/'+e.id]=e);S.pays.forEach(p=>u['pays/'+p.id]=p);S.sales.forEach(x=>u['sales/'+x.id]=x);for(const k in S.stock)u['stock/'+k]=S.stock[k];S.gas.forEach(g=>u['gas/'+g.id]=g);
       CLOUD.update(u);toast('☁️ Subiendo los datos de este dispositivo…');return;
     }
   }
-  S.entries=arr(v.entries);S.pays=arr(v.pays);S.sales=arr(v.sales);S.stock=v.stock||{};S.cur=v.cur||'S/';BK=arr(v.backups);
-  save();drawProds();calc();$('cur').value=S.cur;render();if(!$('bk').hidden)drawBk();autoBk();
+  S.entries=arr(v.entries);S.pays=arr(v.pays);S.sales=arr(v.sales);S.stock=v.stock||{};S.gas=arr(v.gas);S.gname=v.gname||'';S.cur=v.cur||'S/';BK=arr(v.backups);
+  rebuild();fixSel();save();drawProds();calc();$('cur').value=S.cur;render();if(!$('bk').hidden)drawBk();autoBk();
 }
 
 async function initCloud(){
@@ -388,7 +400,7 @@ const bebHtml=(sel,attr)=>BEB.map(k=>{const it=item(k),l=left(k);
   return `<button type="button" ${attr}="${k}" class="${k===sel?'on':''}"><span>${it.e}</span>${k}<small style="color:inherit;opacity:.85">${S.cur+' '+it.p.toFixed(2)}</small><small style="color:inherit;opacity:.6">${l==null?'':'Quedan '+Math.max(l,0)}</small></button>`}).join('');
 function drawProds(){
   $('prods').innerHTML=PRODS.map(p=>{const on=p.g?isBeb(prod):p.k===prod;
-    return `<button type="button" data-p="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?(on?prod+' '+item(prod).p.toFixed(2):'3 precios'):p.p==null?'editable':S.cur+' '+p.p.toFixed(2)}</small></button>`}).join('');
+    return `<button type="button" data-p="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?(on?prod+' '+item(prod).p.toFixed(2):BEB.length+' opciones'):p.p==null?'editable':S.cur+' '+p.p.toFixed(2)}</small></button>`}).join('');
   $('bsub').innerHTML=isBeb(prod)&&bOpen?bebHtml(prod,'data-p'):'';
 }
 function calc(){
@@ -531,7 +543,7 @@ $('list').onchange=onSel;$('plist').onchange=onSel;
 
 /* ---------- stock y ventas al contado ---------- */
 const sold=k=>S.entries.reduce((a,e)=>a+(al(e.prod)===k?e.qty:0),0)+S.sales.reduce((a,e)=>a+(al(e.prod)===k?e.qty:0),0);
-const stk0=k=>S.stock[k]!=null?S.stock[k]:(k==='Gaseosa'?S.stock['Gaseosas']:undefined);
+const stk0=k=>S.stock[k]!=null?S.stock[k]:(k===gname()?S.stock['Gaseosas']:undefined);
 const left=k=>stk0(k)==null?null:stk0(k)-sold(k);
 function drawStock(){
   $('stk').innerHTML=ITEMS.map(p=>{const l=left(p.k),c=l==null?'':l<=0?'zero':l<=5?'lo':'';
@@ -545,21 +557,55 @@ function warnStock(pd,qty){
   const l=left(pd);
   if(l!=null&&qty>l)toast('⚠️ Solo te quedaban '+Math.max(l,0)+' de '+pd);
 }
-$('skb').onclick=openStock;
-function openStock(){
-  $('skrows').innerHTML=ITEMS.map(p=>{const l=left(p.k);
-    return `<div class="srow"><span>${p.e} ${p.k}<small>${l==null?'Sin definir':'Quedan '+l}</small></span><input type="number" inputmode="numeric" min="0" step="1" data-sk="${p.k}" value="${l==null?'':Math.max(l,0)}" placeholder="Tengo"></div>`}).join('');
+$('skb').onclick=()=>openStock();
+function openStock(keep){
+  keep=keep||{};
+  $('skrows').innerHTML=ITEMS.map(p=>{const l=left(p.k),v=keep[p.k]!=null?keep[p.k]:(l==null?'':Math.max(l,0)),g=S.gas.find(x=>x.name===p.k);
+    const pr=g?`<input type="number" inputmode="decimal" min="0" step="0.1" data-gp="${g.id}" value="${keep['p'+g.id]!=null?keep['p'+g.id]:g.price}" style="width:72px" aria-label="Precio">`:'';
+    const del=g?`<button type="button" class="gh warn" data-gd="${g.id}" aria-label="Quitar">✕</button>`:'';
+    const gid=g?g.id:p.k===gname()?'@base':'';
+    const nm=gid?`<input data-gn="${gid}" maxlength="24" value="${esc(keep['n'+gid]!=null?keep['n'+gid]:p.k)}" aria-label="Nombre" style="width:100%;text-align:left;padding:7px 9px">`:p.e+' '+esc(p.k);
+    return `<div class="srow"><span>${nm}<small>${l==null?'Sin definir':'Quedan '+l}</small></span>${pr}<input type="number" inputmode="numeric" min="0" step="1" data-sk="${esc(p.k)}" value="${v}" placeholder="Tengo">${del}</div>`}).join('')+
+  `<div class="qa" style="margin-top:14px"><small>➕ Agregar otra gaseosa (con su precio)</small><input id="gn" maxlength="24" placeholder="Nombre. Ej. Inca Kola 1L" style="grid-column:1/-1"><input id="gpr" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Precio"><input id="gst" type="number" inputmode="numeric" min="0" step="1" placeholder="Tengo"><button type="button" id="gadd">Agregar gaseosa</button></div>`;
   $('skm').hidden=false;
 }
+$('skrows').onclick=e=>{
+  const cap=()=>{const m={};document.querySelectorAll('[data-sk]').forEach(i=>{if(i.value!=='')m[i.dataset.sk]=i.value});document.querySelectorAll('[data-gp]').forEach(i=>m['p'+i.dataset.gp]=i.value);document.querySelectorAll('[data-gn]').forEach(i=>m['n'+i.dataset.gn]=i.value);return m};
+  const d=e.target.closest('[data-gd]');
+  if(d){
+    const g=S.gas.find(x=>x.id===d.dataset.gd);if(!g||!confirm('¿Quitar "'+g.name+'" de la lista?'))return;
+    const keep=cap();delete keep[g.name];
+    if(commit({['gas/'+g.id]:null,['stock/'+g.name]:null})){render();openStock(keep);toast('Gaseosa quitada')}return}
+  if(e.target.id!=='gadd')return;
+  const name=clean($('gn').value).replace(/[.$#\[\]\/]/g,''),pr=parseFloat($('gpr').value),st=$('gst').value.trim();
+  if(!name){toast('Escribe el nombre de la gaseosa');$('gn').focus();return}
+  if(ITEMS.some(p=>p.k.toLowerCase()===name.toLowerCase())||['bebidas','gaseosas'].includes(name.toLowerCase())){toast('Ya existe una con ese nombre');return}
+  if(!(pr>0)){toast('Escribe el precio');$('gpr').focus();return}
+  const id=uid(),u={['gas/'+id]:{id,name,price:r2(pr)}};
+  if(st!==''&&parseInt(st)>=0)u['stock/'+name]=parseInt(st)+sold(name);
+  const keep=cap();
+  if(commit(u)){render();openStock(keep);toast('🥫 '+name+' agregada')}
+};
 $('skno').onclick=()=>{$('skm').hidden=true};
 $('skok').onclick=()=>{
-  const u={};let n=0;
+  const u={},ren={};let n=0;
+  for(const i of document.querySelectorAll('[data-gn]')){
+    const base=i.dataset.gn==='@base',g=base?{name:gname()}:S.gas.find(x=>x.id===i.dataset.gn);if(!g)continue;
+    const nn=clean(i.value).replace(/[.$#\[\]\/]/g,'');if(nn===g.name)continue;
+    if(!nn){toast('El nombre no puede quedar vacío');return}
+    if(ITEMS.some(p=>p.k!==g.name&&p.k.toLowerCase()===nn.toLowerCase())||['bebidas','gaseosas'].includes(nn.toLowerCase())){toast('Ya existe una con el nombre "'+nn+'"');return}
+    ren[g.name]=nn;if(base)u.gname=nn;else u['gas/'+g.id]={...g,name:nn};n++;
+    S.entries.filter(e=>al(e.prod)===g.name).forEach(e=>u['entries/'+e.id]={...e,prod:nn});
+    S.sales.filter(e=>al(e.prod)===g.name).forEach(e=>u['sales/'+e.id]={...e,prod:nn});
+    const sv=stk0(g.name);if(sv!=null){u['stock/'+nn]=sv;u['stock/'+g.name]=null;if(base&&S.stock['Gaseosas']!=null)u['stock/Gaseosas']=null}
+  }
   document.querySelectorAll('[data-sk]').forEach(i=>{
     if(i.value.trim()==='')return;
     const v=parseInt(i.value);if(!(v>=0))return;
     const k=i.dataset.sk;if(left(k)===v)return;
-    u['stock/'+k]=v+sold(k);n++;
+    const nk2=ren[k]||k;u['stock/'+nk2]=v+sold(k);n++;
   });
+  document.querySelectorAll('[data-gp]').forEach(i=>{const g=S.gas.find(x=>x.id===i.dataset.gp),v=parseFloat(i.value);if(g&&v>0&&r2(v)!==g.price){u['gas/'+g.id]={...g,price:r2(v)};n++}});
   if(n&&!commit(u))return;
   $('skm').hidden=true;render();if(n)toast('📦 Stock guardado');
 };
@@ -569,7 +615,7 @@ $('cashb').onclick=()=>{cprod=cprod||'Refrescos';$('cq').value=1;$('cp').value=p
 $('cclose').onclick=()=>{$('cash').hidden=true};
 function drawCash(){
   $('cprods').innerHTML=PRODS.map(p=>{const l=p.g?null:left(p.k),on=p.g?isBeb(cprod):p.k===cprod;
-    return `<button type="button" data-cp="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?(on?cprod+' '+item(cprod).p.toFixed(2):'3 precios'):l==null?(p.p==null?'editable':S.cur+' '+p.p.toFixed(2)):'Quedan '+l}</small></button>`}).join('');
+    return `<button type="button" data-cp="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?(on?cprod+' '+item(cprod).p.toFixed(2):BEB.length+' opciones'):l==null?(p.p==null?'editable':S.cur+' '+p.p.toFixed(2)):'Quedan '+l}</small></button>`}).join('');
   $('cbsub').innerHTML=isBeb(cprod)&&cbOpen?bebHtml(cprod,'data-cp'):'';
   const q=parseInt($('cq').value)||0,pv=parseFloat($('cp').value),pr=fixed(cprod)?priceOf(cprod):(isNaN(pv)?0:pv);
   $('cpv').textContent=q+' × '+fmt(pr);$('cst').textContent=fmt(q*pr);
@@ -604,7 +650,7 @@ const mapOf=a=>Object.fromEntries(a.map(x=>[x.id,x]));
 function saveBk(tag,quiet,noPrune){
   if(!CLOUD){toast('☁️ Conecta la nube primero (⋯ Más → Clave de la nube)');return false}
   const id=uid(),u={['backups/'+id]:{ts:Date.now(),date:today(),tag:tag||'',n:S.entries.length+S.pays.length+S.sales.length,
-    data:{entries:mapOf(S.entries),pays:mapOf(S.pays),sales:mapOf(S.sales),stock:{...S.stock},cur:S.cur}}};
+    data:{entries:mapOf(S.entries),pays:mapOf(S.pays),sales:mapOf(S.sales),stock:{...S.stock},gas:mapOf(S.gas),gname:S.gname||'',cur:S.cur}}};
   CLOUD.update(u);
   if(!quiet)toast('☁️ Respaldo guardado en la nube');
   return true;
@@ -633,10 +679,11 @@ $('bkl').onclick=e=>{
   const b=BK.find(x=>x.id===r.dataset.bkr);if(!b)return;
   saveBk('antes de restaurar',true,true);
   const dt=b.data||{},u={};
-  S.entries.forEach(x=>u['entries/'+x.id]=null);S.pays.forEach(x=>u['pays/'+x.id]=null);S.sales.forEach(x=>u['sales/'+x.id]=null);for(const k in S.stock)u['stock/'+k]=null;
+  S.entries.forEach(x=>u['entries/'+x.id]=null);S.pays.forEach(x=>u['pays/'+x.id]=null);S.sales.forEach(x=>u['sales/'+x.id]=null);for(const k in S.stock)u['stock/'+k]=null;S.gas.forEach(x=>u['gas/'+x.id]=null);u.gname=null;
   Object.values(dt.entries||{}).forEach(x=>u['entries/'+x.id]=x);
   Object.values(dt.pays||{}).forEach(x=>u['pays/'+x.id]=x);
   Object.values(dt.sales||{}).forEach(x=>u['sales/'+x.id]=x);
+  Object.values(dt.gas||{}).forEach(x=>u['gas/'+x.id]=x);u.gname=dt.gname||null;
   for(const k in (dt.stock||{}))u['stock/'+k]=dt.stock[k];
   u.cur=dt.cur||'S/';
   if(commit(u)){open.clear();drawProds();calc();$('cur').value=S.cur;render();$('bk').hidden=true;toast('☁️ Respaldo restaurado')}
@@ -694,7 +741,7 @@ $('menu').onclick=async ev=>{
   else if(m==='cloud'){$('menu').open=false;openGate()}
   else if(m==='all'){
     if(armed!=='ALL'){arm('ALL');b.classList.add('armed');b.textContent='¿Seguro? Toca otra vez';return}
-    const u={};S.entries.forEach(e=>u['entries/'+e.id]=null);S.pays.forEach(p=>u['pays/'+p.id]=null);S.sales.forEach(x=>u['sales/'+x.id]=null);for(const k in S.stock)u['stock/'+k]=null;
+    const u={};S.entries.forEach(e=>u['entries/'+e.id]=null);S.pays.forEach(p=>u['pays/'+p.id]=null);S.sales.forEach(x=>u['sales/'+x.id]=null);for(const k in S.stock)u['stock/'+k]=null;S.gas.forEach(x=>u['gas/'+x.id]=null);u.gname=null;
     armed=null;if(getClave()&&!CLOUD){toast('⏳ Conectando con la nube… intenta en un momento');b.classList.remove('armed');b.textContent='🗑️ Borrar todo';return}
     if(CLOUD&&(S.entries.length||S.pays.length||S.sales.length||Object.keys(S.stock).length))saveBk('antes de borrar todo',true);
     if(commit(u)){open.clear();toast(CLOUD?'Cuaderno vacío · respaldo guardado en la nube':'Cuaderno vacío')}render();$('menu').open=false;b.classList.remove('armed');b.textContent='🗑️ Borrar todo'}
@@ -707,8 +754,10 @@ $('file').onchange=e=>{
       const j=JSON.parse(r.result);
       if(!Array.isArray(j.entries)||!Array.isArray(j.pays))throw 0;
       const u={},cid=x=>String(x||uid()).replace(/[.$#\[\]\/]/g,'_');
-      S.entries.forEach(e=>u['entries/'+e.id]=null);S.pays.forEach(p=>u['pays/'+p.id]=null);S.sales.forEach(x=>u['sales/'+x.id]=null);for(const k in S.stock)u['stock/'+k]=null;
+      S.entries.forEach(e=>u['entries/'+e.id]=null);S.pays.forEach(p=>u['pays/'+p.id]=null);S.sales.forEach(x=>u['sales/'+x.id]=null);for(const k in S.stock)u['stock/'+k]=null;S.gas.forEach(x=>u['gas/'+x.id]=null);u.gname=null;
       (Array.isArray(j.sales)?j.sales:[]).forEach(x=>{const id=cid(x.id);u['sales/'+id]={...x,id}});
+      u.gname=j.gname||null;
+      (Array.isArray(j.gas)?j.gas:[]).forEach(x=>{const id=cid(x.id);u['gas/'+id]={...x,id}});
       if(j.stock&&typeof j.stock==='object')for(const k in j.stock)u['stock/'+k.replace(/[.$#\[\]\/]/g,'_')]=j.stock[k];
       j.entries.forEach(e=>{const id=cid(e.id);u['entries/'+id]={...e,id}});
       j.pays.forEach(p=>{const id=cid(p.id);u['pays/'+id]={...p,id}});
