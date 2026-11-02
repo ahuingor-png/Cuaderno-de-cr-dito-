@@ -171,7 +171,8 @@ details.menu summary::-webkit-details-marker{display:none}
 </section>
 <div class="lh" style="margin-bottom:6px"><small class="sk" style="margin:0">📦 STOCK DISPONIBLE</small><button class="gh" id="skb">✏️ Stock y precios</button></div>
 <section class="stk" id="stk"></section>
-<button class="open" id="cashb" style="margin-bottom:14px;background:var(--ok);color:#fff"></button>
+<button class="open" id="cashb" style="margin-bottom:10px;background:var(--ok);color:#fff"></button>
+<button class="open alt" id="dayb" style="margin-bottom:14px"></button>
 
 <div class="main">
   <button class="open" id="ob"></button>
@@ -250,6 +251,14 @@ details.menu summary::-webkit-details-marker{display:none}
     <button class="add ok" id="bks">☁️ Guardar respaldo ahora</button>
     <div id="bkl" style="margin-top:10px"></div>
     <button class="gh" id="bkx" style="width:100%;margin-top:10px">Cerrar</button>
+  </div>
+</div>
+<div class="gate" id="dv" hidden>
+  <div class="card sc">
+    <h3 class="disp">🧾 Ventas del día</h3>
+    <p class="mut" style="margin:0 0 4px">Cuenta lo vendido <b>al contado</b> hoy y lo que diste <b>a crédito hoy y te cancelaron hoy mismo</b>. Si te lo cancelan otro día, deja de aparecer aquí.</p>
+    <div id="dvb"></div>
+    <button class="gh" id="dvx" style="width:100%;margin-top:12px">Cerrar</button>
   </div>
 </div>
 <div class="gate" id="ov" hidden>
@@ -533,16 +542,15 @@ function onAct(ev){
       if(pay(k,v))toast('Abono de '+fmt(v)+' registrado');break}
     case 'del':
       if(armed!==d.id){arm(d.id);break}
-      armed=null;if(commit({[(d.t==='c'?'entries/':'pays/')+d.id]:null}))toast('Borrado');break;
+      {const u={[(d.t==='c'?'entries/':'pays/')+d.id]:null};if(d.t==='c')keepStock(u,S.entries.filter(e=>e.id===d.id));
+      armed=null;if(commit(u))toast('Borrado');break}
     case 'delp':{
       const pk='P'+k;if(armed!==pk){arm(pk);break}
       const u={};const mine=S.entries.filter(e=>nk(e.name)===k);
-      const settled=debtOf(k)<=0.004;
       mine.forEach(e=>u['entries/'+e.id]=null);S.pays.filter(p=>nk(p.name)===k).forEach(p=>u['pays/'+p.id]=null);
-      /* Cuenta saldada: esos productos ya salieron, así que el stock NO debe subir al borrarla.
+      /* Al borrar a la persona (deba o esté saldada) el stock NO debe subir: solo cambia cuando tú lo escribes.
          El stock disponible = stock base − vendido, por eso se baja el stock base lo mismo que se quita de lo vendido. */
-      if(settled){const q={};mine.forEach(e=>{const it=al(e.prod);q[it]=(q[it]||0)+(e.qty||0)});
-        for(const it in q){const b=stk0(it);if(b!=null)u['stock/'+it]=b-q[it]}}
+      keepStock(u,mine);
       armed=null;if(commit(u)){open.delete(k);toast('Persona eliminada')}break}
   }
   render();
@@ -555,10 +563,14 @@ $('list').onchange=onSel;$('plist').onchange=onSel;
 const sold=k=>S.entries.reduce((a,e)=>a+(al(e.prod)===k?e.qty:0),0)+S.sales.reduce((a,e)=>a+(al(e.prod)===k?e.qty:0),0);
 const stk0=k=>S.stock[k]!=null?S.stock[k]:(k===gname()?S.stock['Gaseosas']:undefined);
 const left=k=>stk0(k)==null?null:stk0(k)-sold(k);
+/* Al borrar registros vendidos, baja el stock base lo mismo que baja lo vendido, para que "Quedan" no cambie. */
+function keepStock(u,list){const q={};list.forEach(e=>{const it=al(e.prod);q[it]=(q[it]||0)+(e.qty||0)});
+  for(const it in q){const b=stk0(it);if(b!=null)u['stock/'+it]=b-q[it]}}
 function drawStock(){
   $('stk').innerHTML=ITEMS.map(p=>{const l=left(p.k),c=l==null?'':l<=0?'zero':l<=5?'lo':'';
     return `<div class="${c}"><span>${p.e}</span><b>${l==null?'—':l}</b>${p.k}</div>`}).join('');
   const td=S.sales.filter(x=>x.date===today());
+  {const dd=dayData();$('dayb').innerHTML='<span>🧾 Ventas del día</span><b>'+fmt(dd.tc+dd.tr)+'</b>';if(!$('dv').hidden)drawDay()}
   $('cashb').innerHTML='<span>💵 Venta al contado</span><b>Hoy '+fmt(td.reduce((a,x)=>a+x.sub,0))+'</b>';
   if(!$('cash').hidden)drawCash();
   if(!$('ov').hidden)drawOv();
@@ -661,7 +673,7 @@ $('clist').onclick=e=>{
   const b=e.target.closest('[data-cd]');if(!b)return;
   const id=b.dataset.cd;
   if(armed!==id){armed=id;clearTimeout(armT);armT=setTimeout(()=>{armed=null;drawCash()},3000);drawCash();return}
-  armed=null;if(commit({['sales/'+id]:null}))toast('Venta borrada');render();
+  const u={['sales/'+id]:null};keepStock(u,S.sales.filter(x=>x.id===id));armed=null;if(commit(u))toast('Venta borrada');render();
 };
 
 /* ---------- respaldos en la nube ---------- */
@@ -709,6 +721,41 @@ $('bkl').onclick=e=>{
   u.cur=dt.cur||'S/';
   if(commit(u)){open.clear();drawProds();calc();$('cur').value=S.cur;render();$('bk').hidden=true;toast('☁️ Respaldo restaurado')}
 };
+
+/* ---------- ventas del día ---------- */
+/* Un crédito cuenta como venta del día si se dio hoy Y quedó cubierto con pagos de hoy (los pagos cubren primero lo más antiguo). */
+function paidSameDay(day){
+  const by=new Map(),out=[];
+  S.entries.forEach((e,i)=>{const k=nk(e.name);if(!by.has(k))by.set(k,{e:[],p:[]});by.get(k).e.push({e,i})});
+  S.pays.forEach((p,i)=>{const k=nk(p.name);if(!by.has(k))by.set(k,{e:[],p:[]});by.get(k).p.push({p,i})});
+  by.forEach(g=>{
+    const es=g.e.sort((a,b)=>String(a.e.date).localeCompare(String(b.e.date))||a.i-b.i);
+    const ps=g.p.sort((a,b)=>String(a.p.date).localeCompare(String(b.p.date))||a.i-b.i);
+    let cum=0;const cp=ps.map(x=>({d:x.p.date,c:(cum+=x.p.amount)}));
+    let need=0;
+    es.forEach(x=>{need+=x.e.sub;
+      if(x.e.date!==day)return;
+      const j=cp.find(c=>c.c>=need-0.004);
+      if(j&&(j.d>x.e.date?j.d:x.e.date)===day)out.push(x.e)});
+  });
+  return out;
+}
+function dayData(){
+  const d=today(),c=S.sales.filter(x=>x.date===d),r=paidSameDay(d);
+  return {c,r,tc:r2(c.reduce((a,x)=>a+x.sub,0)),tr:r2(r.reduce((a,x)=>a+x.sub,0))};
+}
+function drawDay(){
+  const {c,r,tc,tr}=dayData(),rows=ITEMS.map(p=>{
+    const a=c.filter(x=>al(x.prod)===p.k),b=r.filter(x=>al(x.prod)===p.k);
+    return {p,cq:a.reduce((t,x)=>t+x.qty,0),cm:a.reduce((t,x)=>t+x.sub,0),rq:b.reduce((t,x)=>t+x.qty,0),rm:b.reduce((t,x)=>t+x.sub,0)}}).filter(x=>x.cq||x.rq);
+  const uq=rows.reduce((t,x)=>t+x.cq+x.rq,0);
+  $('dvb').innerHTML=`<div class="sub" style="margin:10px 0"><div><small style="color:inherit;opacity:.7">TOTAL VENDIDO HOY</small><br><small style="color:inherit;opacity:.85">${uq} unidades · ${fmtD(today())}</small></div><b class="disp">${fmt(tc+tr)}</b></div>`+
+  (rows.length?`<table class="ovt"><tr><th>Producto</th><th>Contado</th><th>Crédito pagado hoy</th><th>Total</th></tr>`+
+    rows.map(x=>`<tr><td>${x.p.e} ${esc(x.p.k)}</td><td>${x.cq}<small>${fmt(x.cm)}</small></td><td>${x.rq}<small>${fmt(x.rm)}</small></td><td>${x.cq+x.rq}<small>${fmt(x.cm+x.rm)}</small></td></tr>`).join('')+
+    `<tr class="tt"><td>Total</td><td><small>${fmt(tc)}</small></td><td><small>${fmt(tr)}</small></td><td><small>${fmt(tc+tr)}</small></td></tr></table>`:`<div class="empty">Aún no hay ventas hoy</div>`)+
+  (r.length?`<h3 class="disp" style="margin:14px 0 4px;font-size:1rem">Créditos cancelados hoy</h3>`+r.map(e=>`<div class="mv"><div><b>${esc(e.name)}</b><small>${e.qty} × ${esc(al(e.prod))}</small></div><div class="amt p">${fmt(e.sub)}</div></div>`).join(''):'');
+}
+$('dayb').onclick=()=>{drawDay();$('dv').hidden=false};$('dvx').onclick=()=>{$('dv').hidden=true};
 
 /* ---------- vista general ---------- */
 let ovMode='all';
