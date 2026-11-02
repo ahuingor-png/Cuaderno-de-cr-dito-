@@ -265,7 +265,7 @@ details.menu summary::-webkit-details-marker{display:none}
     <h3 class="disp">📦 Stock y precios</h3>
     <p class="mut" style="margin:0 0 4px">Escribe cuántas unidades tienes <b>ahora</b> de cada producto. Baja solo con cada venta (al crédito o al contado). También puedes cambiar el <b>precio</b> de cada uno (vacío = precio original) y agregar productos nuevos de cualquier categoría.</p>
     <div id="skrows"></div>
-    <button class="add" id="skok" style="margin-top:14px">Guardar stock</button>
+    <button class="add" id="skok" style="margin-top:14px">Guardar stock y precios</button>
     <button class="gh" id="skno" style="width:100%;margin-top:8px">Cancelar</button>
   </div>
 </div>
@@ -579,8 +579,8 @@ function openStock(keep){
     const del=g?`<button type="button" class="gh warn" data-gd="${g.id}" aria-label="Quitar">✕</button>`:'';
     const gid=g?g.id:p.b==='@gas'?'@base':'';
     const nm=gid?`<input data-gn="${gid}" maxlength="24" value="${esc(keep['n'+gid]!=null?keep['n'+gid]:p.k)}" aria-label="Nombre" style="width:100%;text-align:left;padding:7px 9px">`:p.e+' '+esc(p.k);
-    return `<div class="srow"><span>${nm}<small>${p.e} ${p.c} · ${l==null?'Sin definir':'Quedan '+l}</small></span>${pr}<input type="number" inputmode="numeric" min="0" step="1" data-sk="${esc(p.k)}" value="${v}" placeholder="Tengo">${del}</div>`}).join('')+
-  `<div class="qa" style="margin-top:14px"><small>➕ Agregar otro producto (con su precio)</small><select id="gc">${CATS.map(c=>`<option value="${c.k}"${keep['gc~']===c.k?' selected':''}>${c.e} ${c.k}</option>`).join('')}</select><input id="gn" maxlength="24" placeholder="Nombre. Ej. Galletas Casino" style="grid-column:1/-1"><input id="gpr" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Precio"><input id="gst" type="number" inputmode="numeric" min="0" step="1" placeholder="Tengo"><button type="button" id="gadd">Agregar producto</button></div>`;
+    return `<div class="srow"><span>${nm}<small>${p.c===p.k?'':p.c+' · '}${l==null?'Sin definir':'Quedan '+l}</small></span>${pr}<input type="number" inputmode="numeric" min="0" step="1" data-sk="${esc(p.k)}" value="${v}" placeholder="Tengo">${del}</div>`}).join('')+
+  `<div class="qa" style="margin-top:14px"><small>➕ Agregar gaseosa u otro producto (nombre y precio propios)</small><select id="gc">${CATS.map(c=>`<option value="${c.k}"${keep['gc~']===c.k?' selected':''}>${c.k==='Bebidas'?'🥫 Gaseosas / otras bebidas':c.e+' '+c.k}</option>`).join('')}</select><input id="gn" maxlength="24" placeholder="Nombre. Ej. Inca Kola 1L" style="grid-column:1/-1"><input id="gpr" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Precio"><input id="gst" type="number" inputmode="numeric" min="0" step="1" placeholder="Tengo"><button type="button" id="gadd">Agregar producto</button></div>`;
   $('skm').hidden=false;
 }
 $('skrows').onclick=e=>{
