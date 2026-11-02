@@ -49,7 +49,7 @@ button.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
 .gate .card.sc{max-height:92vh;overflow-y:auto}
 .srow{display:flex;align-items:center;gap:10px;margin-top:8px}
 .srow>span{flex:1;font-weight:600}
-.srow input{width:110px;text-align:center;font-weight:700}
+.srow input{width:84px;text-align:center;font-weight:700}
 .srow small{display:block;font-weight:400}
 .ovt{width:100%;border-collapse:collapse;margin-top:10px;font-size:.82rem}
 .ovt th{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);text-align:right;padding:4px 3px;font-weight:700}
@@ -169,7 +169,7 @@ details.menu summary::-webkit-details-marker{display:none}
   <div class="card big"><small>TOTAL POR COBRAR</small><b class="disp" id="s1"></b><small id="s1b"></small></div>
   <div class="card"><small>PERSONAS QUE DEBEN</small><b class="disp" id="s2"></b></div>
 </section>
-<div class="lh" style="margin-bottom:6px"><small class="sk" style="margin:0">📦 STOCK DISPONIBLE</small><button class="gh" id="skb">✏️ Llenar stock</button></div>
+<div class="lh" style="margin-bottom:6px"><small class="sk" style="margin:0">📦 STOCK DISPONIBLE</small><button class="gh" id="skb">✏️ Stock y precios</button></div>
 <section class="stk" id="stk"></section>
 <button class="open" id="cashb" style="margin-bottom:14px;background:var(--ok);color:#fff"></button>
 
@@ -262,8 +262,8 @@ details.menu summary::-webkit-details-marker{display:none}
 </div>
 <div class="gate" id="skm" hidden>
   <div class="card sc">
-    <h3 class="disp">📦 Mi stock</h3>
-    <p class="mut" style="margin:0 0 4px">Escribe cuántas unidades tienes <b>ahora</b> de cada producto. Baja solo con cada venta (al crédito o al contado).</p>
+    <h3 class="disp">📦 Stock y precios</h3>
+    <p class="mut" style="margin:0 0 4px">Escribe cuántas unidades tienes <b>ahora</b> de cada producto. Baja solo con cada venta (al crédito o al contado). También puedes cambiar el <b>precio</b> de cada uno (vacío = precio original) y agregar productos nuevos de cualquier categoría.</p>
     <div id="skrows"></div>
     <button class="add" id="skok" style="margin-top:14px">Guardar stock</button>
     <button class="gh" id="skno" style="width:100%;margin-top:8px">Cancelar</button>
@@ -274,21 +274,26 @@ details.menu summary::-webkit-details-marker{display:none}
 <script>
 const KEY='cuaderno_creditos_v2';
 /* ITEMS = cada producto que se vende (cada uno con su propio stock). PRODS = botones que se ven; "Bebidas" abre 3 opciones. */
-const BASE=[{k:'Refrescos',e:'🥤',p:1.5},{k:'Marcianos',e:'🧊',p:2},{k:'Gelatinas',e:'🍮',p:1},{k:'Gaseosa',e:'🥫',p:3.5},{k:'Del Valle',e:'🧃',p:2},{k:'Agua',e:'💧',p:1.5},{k:'Golosinas',e:'🍬',p:null}];
-let ITEMS=BASE,BEB=['Gaseosa','Del Valle','Agua'],PRODS=[];
-const isBeb=k=>BEB.includes(k);
+const BASE=[{k:'Refrescos',b:'Refrescos',c:'Refrescos',e:'🥤',p:1.5},{k:'Marcianos',b:'Marcianos',c:'Marcianos',e:'🧊',p:2},{k:'Gelatinas',b:'Gelatinas',c:'Gelatinas',e:'🍮',p:1},{k:'Gaseosa',b:'@gas',c:'Bebidas',e:'🥫',p:3.5},{k:'Del Valle',b:'Del Valle',c:'Bebidas',e:'🧃',p:2},{k:'Agua',b:'Agua',c:'Bebidas',e:'💧',p:1.5},{k:'Golosinas',b:'Golosinas',c:'Golosinas',e:'🍬',p:null}];
+const CATS=[{k:'Refrescos',e:'🥤'},{k:'Marcianos',e:'🧊'},{k:'Gelatinas',e:'🍮'},{k:'Bebidas',e:'🧃'},{k:'Golosinas',e:'🍬'}];
+const CATE={Refrescos:'🥤',Marcianos:'🧊',Gelatinas:'🍮',Bebidas:'🥫',Golosinas:'🍬'};
+let ITEMS=BASE,GROUP={},PRODS=[];
+const catOf=k=>{const i=ITEMS.find(p=>p.k===k);return i?i.c:''};
 const gname=()=>S.gname||'Gaseosa';
 const al=k=>k==='Gaseosas'?gname():k; /* registros viejos de "Gaseosas" cuentan como "Gaseosa" */
 const item=k=>ITEMS.find(p=>p.k===k);
-let bOpen=false,cbOpen=false; /* si las 3 opciones de Bebidas están desplegadas */
-let S={entries:[],pays:[],sales:[],stock:{},gas:[],gname:'',cur:'S/'};
+let bOpen=null,cbOpen=null; /* si las 3 opciones de Bebidas están desplegadas */
+let S={entries:[],pays:[],sales:[],stock:{},gas:[],pr:{},gname:'',cur:'S/'};
 try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.entries)){S=Object.assign(S,r);delete S.prices}}catch(e){}
-if(!Array.isArray(S.sales))S.sales=[];if(!S.stock||typeof S.stock!=='object')S.stock={};if(!Array.isArray(S.gas))S.gas=[];
+if(!Array.isArray(S.sales))S.sales=[];if(!S.stock||typeof S.stock!=='object')S.stock={};if(!Array.isArray(S.gas))S.gas=[];if(!S.pr||typeof S.pr!=='object')S.pr={};
 /* Gaseosas extra (nombre + precio) que tú agregas; cada una con su propio stock */
-function rebuild(){const G={k:gname(),e:'🥫',p:3.5};const gv=[...S.gas].sort((a,b)=>String(a.id).localeCompare(String(b.id))).map(g=>({k:g.name,e:'🥫',p:g.price}));
-  ITEMS=[BASE[0],BASE[1],BASE[2],G,...gv,BASE[4],BASE[5],BASE[6]];
-  BEB=[G.k,...gv.map(x=>x.k),BASE[4].k,BASE[5].k];
-  PRODS=[BASE[0],BASE[1],BASE[2],{k:'Bebidas',e:'🧃',p:null,g:BEB},BASE[6]]}
+function rebuild(){
+  const bs=BASE.map(x=>({...x,k:x.b==='@gas'?gname():x.k,p:S.pr[x.b]!=null?S.pr[x.b]:x.p}));
+  const ex=[...S.gas].sort((a,b)=>String(a.id).localeCompare(String(b.id))).map(g=>({k:g.name,b:null,gid:g.id,c:CATE[g.cat]?g.cat:'Bebidas',e:CATE[g.cat]||'🥫',p:g.price}));
+  ITEMS=[];GROUP={};PRODS=[];
+  CATS.forEach(c=>{const l=[...bs.filter(x=>x.c===c.k),...ex.filter(x=>x.c===c.k)];ITEMS.push(...l);GROUP[c.k]=l.map(x=>x.k);
+    PRODS.push(l.length>1?{k:c.k,cat:c.k,e:c.e,p:null,g:GROUP[c.k]}:{...l[0],cat:c.k})});
+}
 rebuild();
 const $=id=>document.getElementById(id);
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('⚠️ No se pudo guardar en este navegador')}};
@@ -303,8 +308,11 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const priceOf=k=>item(k).p;
 const pcVal=k=>priceOf(k)==null?'':priceOf(k);
 const fixed=k=>priceOf(k)!=null;
-function fixSel(){if(!item(prod)){prod='Marcianos';$('pc').value=pcVal(prod);$('pc').readOnly=fixed(prod)}else if(fixed(prod))$('pc').value=pcVal(prod);
-  if(!item(cprod))cprod='Refrescos';else if(fixed(cprod))$('cp').value=pcVal(cprod)}
+function fixSel(){
+  if(!item(prod)){prod='Marcianos';$('pc').value=pcVal(prod)}
+  $('pc').readOnly=fixed(prod);if(fixed(prod))$('pc').value=pcVal(prod);
+  if(!item(cprod))cprod='Refrescos';
+  $('cp').readOnly=fixed(cprod);if(fixed(cprod))$('cp').value=pcVal(cprod)}
 let prod='Marcianos',open=new Set(),addOpen=new Set(),armed=null,armT,tt;
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2300)}
@@ -342,6 +350,7 @@ function commit(u){
     if(c==='cur'){S.cur=v||'S/';continue}
     if(c==='gname'){S.gname=v||'';continue}
     if(c==='stock'){if(v==null)delete S.stock[id];else S.stock[id]=v;continue}
+    if(c==='pr'){if(v==null)delete S.pr[id];else S.pr[id]=v;continue}
     const a=c==='entries'?S.entries:c==='sales'?S.sales:c==='gas'?S.gas:S.pays,i=a.findIndex(x=>x.id===id);
     if(v==null){if(i>=0)a.splice(i,1)}else if(i>=0)a[i]=v;else a.push(v);
   }
@@ -356,13 +365,13 @@ function onSnap(snap){
   const arr=o=>o?Object.entries(o).map(([id,x])=>({...x,id})):[];
   if(!lsGet(MIG)){
     lsSet(MIG,'1');
-    if(!v.entries&&!v.pays&&!v.sales&&!v.stock&&!v.gas&&(S.gas.length||S.entries.length||S.pays.length||S.sales.length||Object.keys(S.stock).length)){
+    if(!v.entries&&!v.pays&&!v.sales&&!v.stock&&!v.gas&&!v.pr&&(Object.keys(S.pr).length||S.gas.length||S.entries.length||S.pays.length||S.sales.length||Object.keys(S.stock).length)){
       const u={cur:S.cur};
-      S.entries.forEach(e=>u['entries/'+e.id]=e);S.pays.forEach(p=>u['pays/'+p.id]=p);S.sales.forEach(x=>u['sales/'+x.id]=x);for(const k in S.stock)u['stock/'+k]=S.stock[k];S.gas.forEach(g=>u['gas/'+g.id]=g);
+      S.entries.forEach(e=>u['entries/'+e.id]=e);S.pays.forEach(p=>u['pays/'+p.id]=p);S.sales.forEach(x=>u['sales/'+x.id]=x);for(const k in S.stock)u['stock/'+k]=S.stock[k];S.gas.forEach(g=>u['gas/'+g.id]=g);for(const k in S.pr)u['pr/'+k]=S.pr[k];
       CLOUD.update(u);toast('☁️ Subiendo los datos de este dispositivo…');return;
     }
   }
-  S.entries=arr(v.entries);S.pays=arr(v.pays);S.sales=arr(v.sales);S.stock=v.stock||{};S.gas=arr(v.gas);S.gname=v.gname||'';S.cur=v.cur||'S/';BK=arr(v.backups);
+  S.entries=arr(v.entries);S.pays=arr(v.pays);S.sales=arr(v.sales);S.stock=v.stock||{};S.gas=arr(v.gas);S.pr=v.pr||{};S.gname=v.gname||'';S.cur=v.cur||'S/';BK=arr(v.backups);
   rebuild();fixSel();save();drawProds();calc();$('cur').value=S.cur;render();if(!$('bk').hidden)drawBk();autoBk();
 }
 
@@ -396,12 +405,13 @@ $('gno').onclick=()=>{
 };
 
 /* ---------- formulario ---------- */
-const bebHtml=(sel,attr)=>BEB.map(k=>{const it=item(k),l=left(k);
-  return `<button type="button" ${attr}="${k}" class="${k===sel?'on':''}"><span>${it.e}</span>${k}<small style="color:inherit;opacity:.85">${S.cur+' '+it.p.toFixed(2)}</small><small style="color:inherit;opacity:.6">${l==null?'':'Quedan '+Math.max(l,0)}</small></button>`}).join('');
+const subHtml=(cat,sel,attr)=>(GROUP[cat]||[]).map(k=>{const it=item(k),l=left(k);
+  return `<button type="button" ${attr}="${esc(k)}" class="${k===sel?'on':''}"><span>${it.e}</span>${esc(k)}<small style="color:inherit;opacity:.85">${it.p==null?'editable':S.cur+' '+it.p.toFixed(2)}</small><small style="color:inherit;opacity:.6">${l==null?'':'Quedan '+Math.max(l,0)}</small></button>`}).join('');
+const ptxt=(p,sel)=>p.g?(catOf(sel)===p.cat?sel+' '+(item(sel).p==null?'editable':item(sel).p.toFixed(2)):p.g.length+' opciones'):p.p==null?'editable':S.cur+' '+p.p.toFixed(2);
 function drawProds(){
-  $('prods').innerHTML=PRODS.map(p=>{const on=p.g?isBeb(prod):p.k===prod;
-    return `<button type="button" data-p="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?(on?prod+' '+item(prod).p.toFixed(2):BEB.length+' opciones'):p.p==null?'editable':S.cur+' '+p.p.toFixed(2)}</small></button>`}).join('');
-  $('bsub').innerHTML=isBeb(prod)&&bOpen?bebHtml(prod,'data-p'):'';
+  $('prods').innerHTML=PRODS.map(p=>{const on=p.g?catOf(prod)===p.cat:p.k===prod;
+    return `<button type="button" data-p="${esc(p.g?'@'+p.cat:p.k)}" class="${on?'on':''}"><span>${p.e}</span>${esc(p.g?p.cat:p.k)}<small style="color:inherit;opacity:.6">${esc(ptxt(p,prod))}</small></button>`}).join('');
+  $('bsub').innerHTML=bOpen&&bOpen===catOf(prod)&&(GROUP[bOpen]||[]).length>1?subHtml(bOpen,prod,'data-p'):'';
 }
 function calc(){
   const q=parseInt($('qt').value)||0,p=parseFloat($('pc').value);
@@ -409,7 +419,7 @@ function calc(){
   $('pv').textContent=q+' × '+fmt(pr);
   $('st').textContent=fmt(q*pr);
 }
-const pickP=e=>{const b=e.target.closest('[data-p]');if(!b)return;let k=b.dataset.p;if(k==='Bebidas'){bOpen=isBeb(prod)?!bOpen:true;k=isBeb(prod)?prod:BEB[0]}else if(b.closest('#prods'))bOpen=false;prod=k;$('pc').value=pcVal(prod);$('pc').readOnly=fixed(prod);drawProds();calc()};
+const pickP=e=>{const b=e.target.closest('[data-p]');if(!b)return;let k=b.dataset.p;if(k[0]==='@'){const c=k.slice(1),same=catOf(prod)===c;bOpen=same&&bOpen===c?null:c;k=same?prod:GROUP[c][0]}else if(b.closest('#prods'))bOpen=null;prod=k;$('pc').value=pcVal(prod);$('pc').readOnly=fixed(prod);drawProds();calc()};
 $('prods').onclick=pickP;$('bsub').onclick=pickP;
 document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('qt').value=Math.max(0,(parseInt($('qt').value)||0)+parseInt(b.dataset.q));calc()});
 $('qt').oninput=calc;$('pc').oninput=calc;
@@ -446,7 +456,7 @@ function groups(){
   return [...m.values()];
 }
 
-const qaHtml=x=>`<div class="qa"><small>➕ Agregar más a ${esc(x.name)}</small><select data-qp>${ITEMS.map(p=>`<option value="${p.k}">${p.e} ${p.k}</option>`).join('')}</select><div class="qty"><button type="button" data-act="qm">−</button><input type="number" inputmode="numeric" min="1" value="1" data-qq aria-label="Cantidad"><button type="button" data-act="qp">+</button></div><input type="number" inputmode="decimal" min="0" step="0.1" value="${pcVal(PRODS[0].k)}" ${fixed(PRODS[0].k)?'readonly':''} data-qpr placeholder="Precio" aria-label="Precio"><button data-act="qadd" data-k="${esc(x.k)}">Agregar</button></div>`;
+const qaHtml=x=>`<div class="qa"><small>➕ Agregar más a ${esc(x.name)}</small><select data-qp>${ITEMS.map(p=>`<option value="${p.k}">${p.e} ${p.k}</option>`).join('')}</select><div class="qty"><button type="button" data-act="qm">−</button><input type="number" inputmode="numeric" min="1" value="1" data-qq aria-label="Cantidad"><button type="button" data-act="qp">+</button></div><input type="number" inputmode="decimal" min="0" step="0.1" value="${pcVal(ITEMS[0].k)}" ${fixed(ITEMS[0].k)?'readonly':''} data-qpr placeholder="Precio" aria-label="Precio"><button data-act="qadd" data-k="${esc(x.k)}">Agregar</button></div>`;
 function card(x){
   const o=open.has(x.k);
   const ini=x.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
@@ -558,42 +568,46 @@ function warnStock(pd,qty){
   if(l!=null&&qty>l)toast('⚠️ Solo te quedaban '+Math.max(l,0)+' de '+pd);
 }
 $('skb').onclick=()=>openStock();
+const RES=()=>['gaseosas',...CATS.map(c=>c.k.toLowerCase())];
+const cleanName=s=>clean(s).replace(/[.$#\[\]\/@]/g,'');
 function openStock(keep){
   keep=keep||{};
-  $('skrows').innerHTML=ITEMS.map(p=>{const l=left(p.k),v=keep[p.k]!=null?keep[p.k]:(l==null?'':Math.max(l,0)),g=S.gas.find(x=>x.name===p.k);
-    const pr=g?`<input type="number" inputmode="decimal" min="0" step="0.1" data-gp="${g.id}" value="${keep['p'+g.id]!=null?keep['p'+g.id]:g.price}" style="width:72px" aria-label="Precio">`:'';
+  $('skrows').innerHTML=ITEMS.map(p=>{const l=left(p.k),v=keep[p.k]!=null?keep[p.k]:(l==null?'':Math.max(l,0)),g=p.gid?S.gas.find(x=>x.id===p.gid):null;
+    const pv=g?(keep['p'+g.id]!=null?keep['p'+g.id]:g.price):(keep['b~'+p.b]!=null?keep['b~'+p.b]:(p.p==null?'':p.p));
+    const pa=g?`data-gp="${g.id}"`:`data-bp="${esc(p.b)}"`;
+    const pr=`<input type="number" inputmode="decimal" min="0" step="0.1" ${pa} value="${pv}" placeholder="Precio" style="width:72px" aria-label="Precio">`;
     const del=g?`<button type="button" class="gh warn" data-gd="${g.id}" aria-label="Quitar">✕</button>`:'';
-    const gid=g?g.id:p.k===gname()?'@base':'';
+    const gid=g?g.id:p.b==='@gas'?'@base':'';
     const nm=gid?`<input data-gn="${gid}" maxlength="24" value="${esc(keep['n'+gid]!=null?keep['n'+gid]:p.k)}" aria-label="Nombre" style="width:100%;text-align:left;padding:7px 9px">`:p.e+' '+esc(p.k);
-    return `<div class="srow"><span>${nm}<small>${l==null?'Sin definir':'Quedan '+l}</small></span>${pr}<input type="number" inputmode="numeric" min="0" step="1" data-sk="${esc(p.k)}" value="${v}" placeholder="Tengo">${del}</div>`}).join('')+
-  `<div class="qa" style="margin-top:14px"><small>➕ Agregar otra gaseosa (con su precio)</small><input id="gn" maxlength="24" placeholder="Nombre. Ej. Inca Kola 1L" style="grid-column:1/-1"><input id="gpr" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Precio"><input id="gst" type="number" inputmode="numeric" min="0" step="1" placeholder="Tengo"><button type="button" id="gadd">Agregar gaseosa</button></div>`;
+    return `<div class="srow"><span>${nm}<small>${p.e} ${p.c} · ${l==null?'Sin definir':'Quedan '+l}</small></span>${pr}<input type="number" inputmode="numeric" min="0" step="1" data-sk="${esc(p.k)}" value="${v}" placeholder="Tengo">${del}</div>`}).join('')+
+  `<div class="qa" style="margin-top:14px"><small>➕ Agregar otro producto (con su precio)</small><select id="gc">${CATS.map(c=>`<option value="${c.k}"${keep['gc~']===c.k?' selected':''}>${c.e} ${c.k}</option>`).join('')}</select><input id="gn" maxlength="24" placeholder="Nombre. Ej. Galletas Casino" style="grid-column:1/-1"><input id="gpr" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Precio"><input id="gst" type="number" inputmode="numeric" min="0" step="1" placeholder="Tengo"><button type="button" id="gadd">Agregar producto</button></div>`;
   $('skm').hidden=false;
 }
 $('skrows').onclick=e=>{
-  const cap=()=>{const m={};document.querySelectorAll('[data-sk]').forEach(i=>{if(i.value!=='')m[i.dataset.sk]=i.value});document.querySelectorAll('[data-gp]').forEach(i=>m['p'+i.dataset.gp]=i.value);document.querySelectorAll('[data-gn]').forEach(i=>m['n'+i.dataset.gn]=i.value);return m};
+  const cap=()=>{const m={};document.querySelectorAll('[data-sk]').forEach(i=>{if(i.value!=='')m[i.dataset.sk]=i.value});document.querySelectorAll('[data-gp]').forEach(i=>m['p'+i.dataset.gp]=i.value);document.querySelectorAll('[data-bp]').forEach(i=>m['b~'+i.dataset.bp]=i.value);document.querySelectorAll('[data-gn]').forEach(i=>m['n'+i.dataset.gn]=i.value);m['gc~']=$('gc').value;return m};
   const d=e.target.closest('[data-gd]');
   if(d){
     const g=S.gas.find(x=>x.id===d.dataset.gd);if(!g||!confirm('¿Quitar "'+g.name+'" de la lista?'))return;
     const keep=cap();delete keep[g.name];
-    if(commit({['gas/'+g.id]:null,['stock/'+g.name]:null})){render();openStock(keep);toast('Gaseosa quitada')}return}
+    if(commit({['gas/'+g.id]:null,['stock/'+g.name]:null})){render();openStock(keep);toast('Producto quitado')}return}
   if(e.target.id!=='gadd')return;
-  const name=clean($('gn').value).replace(/[.$#\[\]\/]/g,''),pr=parseFloat($('gpr').value),st=$('gst').value.trim();
-  if(!name){toast('Escribe el nombre de la gaseosa');$('gn').focus();return}
-  if(ITEMS.some(p=>p.k.toLowerCase()===name.toLowerCase())||['bebidas','gaseosas'].includes(name.toLowerCase())){toast('Ya existe una con ese nombre');return}
+  const cat=$('gc').value,name=cleanName($('gn').value),pr=parseFloat($('gpr').value),st=$('gst').value.trim();
+  if(!name){toast('Escribe el nombre del producto');$('gn').focus();return}
+  if(ITEMS.some(p=>p.k.toLowerCase()===name.toLowerCase())||RES().includes(name.toLowerCase())){toast('Ya existe uno con ese nombre');return}
   if(!(pr>0)){toast('Escribe el precio');$('gpr').focus();return}
-  const id=uid(),u={['gas/'+id]:{id,name,price:r2(pr)}};
+  const id=uid(),u={['gas/'+id]:{id,name,price:r2(pr),cat}};
   if(st!==''&&parseInt(st)>=0)u['stock/'+name]=parseInt(st)+sold(name);
   const keep=cap();
-  if(commit(u)){render();openStock(keep);toast('🥫 '+name+' agregada')}
+  if(commit(u)){render();openStock(keep);toast((CATE[cat]||'')+' '+name+' agregado')}
 };
 $('skno').onclick=()=>{$('skm').hidden=true};
 $('skok').onclick=()=>{
   const u={},ren={};let n=0;
   for(const i of document.querySelectorAll('[data-gn]')){
     const base=i.dataset.gn==='@base',g=base?{name:gname()}:S.gas.find(x=>x.id===i.dataset.gn);if(!g)continue;
-    const nn=clean(i.value).replace(/[.$#\[\]\/]/g,'');if(nn===g.name)continue;
+    const nn=cleanName(i.value);if(nn===g.name)continue;
     if(!nn){toast('El nombre no puede quedar vacío');return}
-    if(ITEMS.some(p=>p.k!==g.name&&p.k.toLowerCase()===nn.toLowerCase())||['bebidas','gaseosas'].includes(nn.toLowerCase())){toast('Ya existe una con el nombre "'+nn+'"');return}
+    if(ITEMS.some(p=>p.k!==g.name&&p.k.toLowerCase()===nn.toLowerCase())||RES().includes(nn.toLowerCase())){toast('Ya existe uno con el nombre "'+nn+'"');return}
     ren[g.name]=nn;if(base)u.gname=nn;else u['gas/'+g.id]={...g,name:nn};n++;
     S.entries.filter(e=>al(e.prod)===g.name).forEach(e=>u['entries/'+e.id]={...e,prod:nn});
     S.sales.filter(e=>al(e.prod)===g.name).forEach(e=>u['sales/'+e.id]={...e,prod:nn});
@@ -605,25 +619,31 @@ $('skok').onclick=()=>{
     const k=i.dataset.sk;if(left(k)===v)return;
     const nk2=ren[k]||k;u['stock/'+nk2]=v+sold(k);n++;
   });
-  document.querySelectorAll('[data-gp]').forEach(i=>{const g=S.gas.find(x=>x.id===i.dataset.gp),v=parseFloat(i.value);if(g&&v>0&&r2(v)!==g.price){u['gas/'+g.id]={...g,price:r2(v)};n++}});
+  document.querySelectorAll('[data-gp]').forEach(i=>{const g=S.gas.find(x=>x.id===i.dataset.gp),v=parseFloat(i.value);if(g&&v>0&&r2(v)!==g.price){u['gas/'+g.id]={...(u['gas/'+g.id]||g),price:r2(v)};n++}});
+  document.querySelectorAll('[data-bp]').forEach(i=>{
+    const b=i.dataset.bp,bs=BASE.find(x=>x.b===b);if(!bs)return;
+    const v=i.value.trim()===''?null:parseFloat(i.value),eff=S.pr[b]!=null?S.pr[b]:bs.p;
+    if(v==null){if(S.pr[b]!=null){u['pr/'+b]=null;n++}}
+    else if(v>0&&r2(v)!==eff){u['pr/'+b]=r2(v);n++}
+  });
   if(n&&!commit(u))return;
-  $('skm').hidden=true;render();if(n)toast('📦 Stock guardado');
+  $('skm').hidden=true;render();if(n){drawProds();calc();toast('📦 Stock y precios guardados')}
 };
 
 let cprod='Refrescos';
 $('cashb').onclick=()=>{cprod=cprod||'Refrescos';$('cq').value=1;$('cp').value=pcVal(cprod);$('cp').readOnly=fixed(cprod);$('cash').hidden=false;drawCash()};
 $('cclose').onclick=()=>{$('cash').hidden=true};
 function drawCash(){
-  $('cprods').innerHTML=PRODS.map(p=>{const l=p.g?null:left(p.k),on=p.g?isBeb(cprod):p.k===cprod;
-    return `<button type="button" data-cp="${p.k}" class="${on?'on':''}"><span>${p.e}</span>${p.k}<small style="color:inherit;opacity:.6">${p.g?(on?cprod+' '+item(cprod).p.toFixed(2):BEB.length+' opciones'):l==null?(p.p==null?'editable':S.cur+' '+p.p.toFixed(2)):'Quedan '+l}</small></button>`}).join('');
-  $('cbsub').innerHTML=isBeb(cprod)&&cbOpen?bebHtml(cprod,'data-cp'):'';
+  $('cprods').innerHTML=PRODS.map(p=>{const l=p.g?null:left(p.k),on=p.g?catOf(cprod)===p.cat:p.k===cprod;
+    return `<button type="button" data-cp="${esc(p.g?'@'+p.cat:p.k)}" class="${on?'on':''}"><span>${p.e}</span>${esc(p.g?p.cat:p.k)}<small style="color:inherit;opacity:.6">${esc(p.g?ptxt(p,cprod):l==null?ptxt(p,cprod):'Quedan '+l)}</small></button>`}).join('');
+  $('cbsub').innerHTML=cbOpen&&cbOpen===catOf(cprod)&&(GROUP[cbOpen]||[]).length>1?subHtml(cbOpen,cprod,'data-cp'):'';
   const q=parseInt($('cq').value)||0,pv=parseFloat($('cp').value),pr=fixed(cprod)?priceOf(cprod):(isNaN(pv)?0:pv);
   $('cpv').textContent=q+' × '+fmt(pr);$('cst').textContent=fmt(q*pr);
   const td=S.sales.filter(x=>x.date===today()).sort((a,b)=>String(b.id).localeCompare(String(a.id)));
   $('ctot').textContent=td.length?td.reduce((a,x)=>a+x.qty,0)+' unidades · '+fmt(td.reduce((a,x)=>a+x.sub,0)):'Aún no hay ventas hoy';
   $('clist').innerHTML=td.map(x=>`<div class="mv"><div><b>${x.qty} × ${esc(x.prod)}</b><small>${x.qty} × ${fmt(x.price)}</small></div><div class="amt p">${fmt(x.sub)}</div><button class="gh ${armed===x.id?'armed':''}" data-cd="${x.id}">${armed===x.id?'¿Seguro?':'✕'}</button></div>`).join('');
 }
-const pickC=e=>{const b=e.target.closest('[data-cp]');if(!b)return;let k=b.dataset.cp;if(k==='Bebidas'){cbOpen=isBeb(cprod)?!cbOpen:true;k=isBeb(cprod)?cprod:BEB[0]}else if(b.closest('#cprods'))cbOpen=false;cprod=k;$('cp').value=pcVal(cprod);$('cp').readOnly=fixed(cprod);drawCash()};
+const pickC=e=>{const b=e.target.closest('[data-cp]');if(!b)return;let k=b.dataset.cp;if(k[0]==='@'){const c=k.slice(1),same=catOf(cprod)===c;cbOpen=same&&cbOpen===c?null:c;k=same?cprod:GROUP[c][0]}else if(b.closest('#cprods'))cbOpen=null;cprod=k;$('cp').value=pcVal(cprod);$('cp').readOnly=fixed(cprod);drawCash()};
 $('cprods').onclick=pickC;$('cbsub').onclick=pickC;
 document.querySelectorAll('[data-cq]').forEach(b=>b.onclick=()=>{$('cq').value=Math.max(0,(parseInt($('cq').value)||0)+parseInt(b.dataset.cq));drawCash()});
 $('cq').oninput=drawCash;$('cp').oninput=drawCash;
@@ -650,7 +670,7 @@ const mapOf=a=>Object.fromEntries(a.map(x=>[x.id,x]));
 function saveBk(tag,quiet,noPrune){
   if(!CLOUD){toast('☁️ Conecta la nube primero (⋯ Más → Clave de la nube)');return false}
   const id=uid(),u={['backups/'+id]:{ts:Date.now(),date:today(),tag:tag||'',n:S.entries.length+S.pays.length+S.sales.length,
-    data:{entries:mapOf(S.entries),pays:mapOf(S.pays),sales:mapOf(S.sales),stock:{...S.stock},gas:mapOf(S.gas),gname:S.gname||'',cur:S.cur}}};
+    data:{entries:mapOf(S.entries),pays:mapOf(S.pays),sales:mapOf(S.sales),stock:{...S.stock},gas:mapOf(S.gas),pr:{...S.pr},gname:S.gname||'',cur:S.cur}}};
   CLOUD.update(u);
   if(!quiet)toast('☁️ Respaldo guardado en la nube');
   return true;
@@ -685,6 +705,7 @@ $('bkl').onclick=e=>{
   Object.values(dt.sales||{}).forEach(x=>u['sales/'+x.id]=x);
   Object.values(dt.gas||{}).forEach(x=>u['gas/'+x.id]=x);u.gname=dt.gname||null;
   for(const k in (dt.stock||{}))u['stock/'+k]=dt.stock[k];
+  for(const k in S.pr)u['pr/'+k]=null;for(const k in (dt.pr||{}))u['pr/'+k]=dt.pr[k];
   u.cur=dt.cur||'S/';
   if(commit(u)){open.clear();drawProds();calc();$('cur').value=S.cur;render();$('bk').hidden=true;toast('☁️ Respaldo restaurado')}
 };
@@ -761,6 +782,7 @@ $('file').onchange=e=>{
       if(j.stock&&typeof j.stock==='object')for(const k in j.stock)u['stock/'+k.replace(/[.$#\[\]\/]/g,'_')]=j.stock[k];
       j.entries.forEach(e=>{const id=cid(e.id);u['entries/'+id]={...e,id}});
       j.pays.forEach(p=>{const id=cid(p.id);u['pays/'+id]={...p,id}});
+      for(const k in S.pr)u['pr/'+k]=null;if(j.pr&&typeof j.pr==='object')for(const k in j.pr)u['pr/'+k.replace(/[.$#\[\]\/]/g,'_')]=j.pr[k];
       u.cur=j.cur||'S/';
       if(commit(u)){drawProds();calc();$('cur').value=S.cur;render();toast('Respaldo restaurado');$('menu').open=false}
     }catch(x){toast('Ese archivo no es un respaldo válido')}
