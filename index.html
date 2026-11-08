@@ -302,6 +302,9 @@ function rebuild(){
   ITEMS=[];GROUP={};PRODS=[];
   CATS.forEach(c=>{const l=[...bs.filter(x=>x.c===c.k),...ex.filter(x=>x.c===c.k)];ITEMS.push(...l);GROUP[c.k]=l.map(x=>x.k);
     PRODS.push(l.length>1?{k:c.k,cat:c.k,e:c.e,p:null,g:GROUP[c.k]}:{...l[0],cat:c.k})});
+  /* orden fijo arriba: Marcianos, Refrescos, Gelatinas, Agua; todo lo demás (productos agregados, Bebidas, Golosinas) va abajo */
+  const TOP=['Marcianos','Refrescos','Gelatinas','Agua'];
+  ITEMS=[...TOP.map(k=>ITEMS.find(x=>x.k===k)).filter(Boolean),...ITEMS.filter(x=>!TOP.includes(x.k))];
 }
 rebuild();
 const $=id=>document.getElementById(id);
