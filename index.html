@@ -145,7 +145,7 @@ details.menu summary::-webkit-details-marker{display:none}
 <header>
   <div>
     <h1 class="disp">📒 Cuaderno de Créditos</h1>
-    <small>Refrescos · Marcianos · Gelatinas · Bebidas · Golosinas</small><br><small id="net"></small>
+    <small>Marcianos · Refrescos · Gelatinas · Agua · Bebidas · Golosinas</small><br><small id="net"></small>
   </div>
   <details class="menu" id="menu"><summary>⋯ Más</summary>
     <div class="mp">
@@ -283,9 +283,9 @@ details.menu summary::-webkit-details-marker{display:none}
 <script>
 const KEY='cuaderno_creditos_v2';
 /* ITEMS = cada producto que se vende (cada uno con su propio stock). PRODS = botones que se ven; "Bebidas" abre 3 opciones. */
-const BASE=[{k:'Refrescos',b:'Refrescos',c:'Refrescos',e:'🥤',p:1.5},{k:'Marcianos',b:'Marcianos',c:'Marcianos',e:'🧊',p:2},{k:'Gelatinas',b:'Gelatinas',c:'Gelatinas',e:'🍮',p:1},{k:'Gaseosa',b:'@gas',c:'Bebidas',e:'🥫',p:3.5},{k:'Del Valle',b:'Del Valle',c:'Bebidas',e:'🧃',p:2},{k:'Agua',b:'Agua',c:'Bebidas',e:'💧',p:1.5},{k:'Golosinas',b:'Golosinas',c:'Golosinas',e:'🍬',p:null}];
-const CATS=[{k:'Refrescos',e:'🥤'},{k:'Marcianos',e:'🧊'},{k:'Gelatinas',e:'🍮'},{k:'Bebidas',e:'🧃'},{k:'Golosinas',e:'🍬'}];
-const CATE={Refrescos:'🥤',Marcianos:'🧊',Gelatinas:'🍮',Bebidas:'🥫',Golosinas:'🍬'};
+const BASE=[{k:'Marcianos',b:'Marcianos',c:'Marcianos',e:'🧊',p:2},{k:'Refrescos',b:'Refrescos',c:'Refrescos',e:'🥤',p:1.5},{k:'Gelatinas',b:'Gelatinas',c:'Gelatinas',e:'🍮',p:1},{k:'Agua',b:'Agua',c:'Agua',e:'💧',p:1.5},{k:'Gaseosa',b:'@gas',c:'Bebidas',e:'🥫',p:3.5},{k:'Del Valle',b:'Del Valle',c:'Bebidas',e:'🧃',p:2},{k:'Golosinas',b:'Golosinas',c:'Golosinas',e:'🍬',p:null}];
+const CATS=[{k:'Marcianos',e:'🧊'},{k:'Refrescos',e:'🥤'},{k:'Gelatinas',e:'🍮'},{k:'Agua',e:'💧'},{k:'Bebidas',e:'🧃'},{k:'Golosinas',e:'🍬'}];
+const CATE={Marcianos:'🧊',Refrescos:'🥤',Gelatinas:'🍮',Agua:'💧',Bebidas:'🥫',Golosinas:'🍬'};
 let ITEMS=BASE,GROUP={},PRODS=[];
 const catOf=k=>{const i=ITEMS.find(p=>p.k===k);return i?i.c:''};
 const gname=()=>S.gname||'Gaseosa';
