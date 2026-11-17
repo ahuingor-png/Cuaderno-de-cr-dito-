@@ -138,6 +138,10 @@ details.menu summary::-webkit-details-marker{display:none}
 @media(prefers-reduced-motion:reduce){#splash img,#splash .ld i,#splash small{animation:none}}
 
 .prods.bsub button{overflow-wrap:anywhere}
+.lgd{margin:14px 0 4px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+.lgr{display:flex;gap:10px;padding:8px 0;border-bottom:1px dashed var(--ln);align-items:flex-start}
+.lgr time{flex:none;font-weight:700;font-size:.8rem;font-variant-numeric:tabular-nums;color:var(--pr);min-width:4.4rem}
+.lgr span{flex:1;min-width:0;overflow-wrap:anywhere;font-size:.88rem}
 </style>
 </head>
 <body>
@@ -151,6 +155,7 @@ details.menu summary::-webkit-details-marker{display:none}
   <details class="menu" id="menu"><summary>⋯ Más</summary>
     <div class="mp">
       <button class="gh" data-m="ov">📊 Vista general (stock y ventas)</button>
+      <button class="gh" data-m="log">🕒 Bitácora (todo con hora)</button>
       <button class="gh" data-m="sum">📋 Copiar resumen</button>
       <button class="gh" data-m="csv">⬇️ Exportar CSV (Excel)</button>
       <button class="gh" data-m="cbk">☁️ Respaldos en la nube</button>
@@ -279,6 +284,17 @@ details.menu summary::-webkit-details-marker{display:none}
     <button class="gh" id="skno" style="width:100%;margin-top:8px">Cancelar</button>
   </div>
 </div>
+<div class="gate" id="lg" hidden>
+  <div class="card sc">
+    <h3 class="disp">🕒 Bitácora</h3>
+    <p class="mut" style="margin:0 0 8px">Todo lo que se hace en el cuaderno queda anotado con fecha y hora.</p>
+    <div class="row"><button class="gh" id="lg-t">Hoy</button><button class="gh" id="lg-a">Todo</button></div>
+    <input id="lgq" type="search" placeholder="🔍 Buscar (persona, producto…)" style="margin-top:8px">
+    <small id="lgc" style="display:block;margin-top:8px"></small>
+    <div id="lgl"></div>
+    <div class="row" style="margin-top:12px"><button class="gh" id="lgd">⬇️ Descargar CSV</button><button class="gh" id="lgx">Cerrar</button></div>
+  </div>
+</div>
 <div id="toast"></div>
 
 <script>
@@ -293,9 +309,9 @@ const gname=()=>S.gname||'Gaseosa';
 const al=k=>k==='Gaseosas'?gname():k; /* registros viejos de "Gaseosas" cuentan como "Gaseosa" */
 const item=k=>ITEMS.find(p=>p.k===k);
 let bOpen=null,cbOpen=null; /* si las 3 opciones de Bebidas están desplegadas */
-let S={entries:[],pays:[],sales:[],stock:{},gas:[],pr:{},gname:'',cur:'S/'};
+let S={entries:[],pays:[],sales:[],stock:{},gas:[],pr:{},gname:'',cur:'S/',log:[]};
 try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.entries)){S=Object.assign(S,r);delete S.prices}}catch(e){}
-if(!Array.isArray(S.sales))S.sales=[];if(!S.stock||typeof S.stock!=='object')S.stock={};if(!Array.isArray(S.gas))S.gas=[];if(!S.pr||typeof S.pr!=='object')S.pr={};
+if(!Array.isArray(S.sales))S.sales=[];if(!Array.isArray(S.log))S.log=[];if(!S.stock||typeof S.stock!=='object')S.stock={};if(!Array.isArray(S.gas))S.gas=[];if(!S.pr||typeof S.pr!=='object')S.pr={};
 /* Gaseosas extra (nombre + precio) que tú agregas; cada una con su propio stock */
 function rebuild(){
   const bs=BASE.map(x=>({...x,k:x.b==='@gas'?gname():x.k,p:S.pr[x.b]!=null?S.pr[x.b]:x.p}));
@@ -318,6 +334,12 @@ const fmtD=s=>{const p=(s||'').split('-');return p.length===3?p[2]+'/'+p[1]+'/'+
 const clean=s=>s.trim().replace(/\s+/g,' ');
 const nk=s=>clean(s).toLowerCase();
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+/* ---------- bitácora: cada acción queda anotada con fecha y hora ---------- */
+let PEND=[];
+const lg=t=>{PEND.push({id:uid()+PEND.length,ts:Date.now(),txt:t})};
+const hr=ts=>ts?new Date(ts).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+const hrs=ts=>new Date(ts).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+const dayOf=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const priceOf=k=>item(k).p;
 const pcVal=k=>priceOf(k)==null?'':priceOf(k);
 const fixed=k=>priceOf(k)!=null;
@@ -354,17 +376,19 @@ function setNet(s){
 
 /* Todos los cambios pasan por aquí: se aplican en pantalla y se mandan a la nube */
 function commit(u){
+  const L=PEND;PEND=[];
   if(getClave()){
     if(denied){toast('🔒 Firebase negó el acceso: revisa las reglas');return false}
     if(!CLOUD){toast('⏳ Conectando con la nube… intenta en un momento');return false}
   }
+  L.forEach(x=>u['log/'+x.id]=x);
   for(const p in u){
     const v=u[p],[c,id]=p.split('/');
     if(c==='cur'){S.cur=v||'S/';continue}
     if(c==='gname'){S.gname=v||'';continue}
     if(c==='stock'){if(v==null)delete S.stock[id];else S.stock[id]=v;continue}
     if(c==='pr'){if(v==null)delete S.pr[id];else S.pr[id]=v;continue}
-    const a=c==='entries'?S.entries:c==='sales'?S.sales:c==='gas'?S.gas:S.pays,i=a.findIndex(x=>x.id===id);
+    const a=c==='entries'?S.entries:c==='sales'?S.sales:c==='gas'?S.gas:c==='log'?S.log:S.pays,i=a.findIndex(x=>x.id===id);
     if(v==null){if(i>=0)a.splice(i,1)}else if(i>=0)a[i]=v;else a.push(v);
   }
   rebuild();fixSel();save();
@@ -378,14 +402,14 @@ function onSnap(snap){
   const arr=o=>o?Object.entries(o).map(([id,x])=>({...x,id})):[];
   if(!lsGet(MIG)){
     lsSet(MIG,'1');
-    if(!v.entries&&!v.pays&&!v.sales&&!v.stock&&!v.gas&&!v.pr&&(Object.keys(S.pr).length||S.gas.length||S.entries.length||S.pays.length||S.sales.length||Object.keys(S.stock).length)){
+    if(!v.entries&&!v.pays&&!v.sales&&!v.stock&&!v.gas&&!v.pr&&(S.log.length||Object.keys(S.pr).length||S.gas.length||S.entries.length||S.pays.length||S.sales.length||Object.keys(S.stock).length)){
       const u={cur:S.cur};
-      S.entries.forEach(e=>u['entries/'+e.id]=e);S.pays.forEach(p=>u['pays/'+p.id]=p);S.sales.forEach(x=>u['sales/'+x.id]=x);for(const k in S.stock)u['stock/'+k]=S.stock[k];S.gas.forEach(g=>u['gas/'+g.id]=g);for(const k in S.pr)u['pr/'+k]=S.pr[k];
+      S.entries.forEach(e=>u['entries/'+e.id]=e);S.pays.forEach(p=>u['pays/'+p.id]=p);S.sales.forEach(x=>u['sales/'+x.id]=x);for(const k in S.stock)u['stock/'+k]=S.stock[k];S.gas.forEach(g=>u['gas/'+g.id]=g);S.log.forEach(x=>u['log/'+x.id]=x);for(const k in S.pr)u['pr/'+k]=S.pr[k];
       CLOUD.update(u);toast('☁️ Subiendo los datos de este dispositivo…');return;
     }
   }
-  S.entries=arr(v.entries);S.pays=arr(v.pays);S.sales=arr(v.sales);S.stock=v.stock||{};S.gas=arr(v.gas);S.pr=v.pr||{};S.gname=v.gname||'';S.cur=v.cur||'S/';BK=arr(v.backups);
-  rebuild();fixSel();save();drawProds();calc();$('cur').value=S.cur;render();if(!$('bk').hidden)drawBk();autoBk();
+  S.entries=arr(v.entries);S.pays=arr(v.pays);S.sales=arr(v.sales);S.stock=v.stock||{};S.gas=arr(v.gas);S.pr=v.pr||{};S.gname=v.gname||'';S.cur=v.cur||'S/';S.log=arr(v.log);BK=arr(v.backups);
+  rebuild();fixSel();save();drawProds();calc();$('cur').value=S.cur;render();if(!$('bk').hidden)drawBk();if(!$('lg').hidden)drawLg();autoBk();
 }
 
 async function initCloud(){
@@ -444,7 +468,8 @@ function addEntry(name,pd,qty,pr,date){
   if(ex)name=clean(ex.name);
   const sub=r2(qty*pr),id=uid();
   warnStock(pd,qty);
-  if(!commit({['entries/'+id]:{id,name,prod:pd,detail:'',qty,price:r2(pr),sub,date}}))return false;
+  lg('➕ Crédito a '+name+': '+qty+' × '+al(pd)+' = '+fmt(sub));
+  if(!commit({['entries/'+id]:{id,name,prod:pd,detail:'',qty,price:r2(pr),sub,date,ts:Date.now()}}))return false;
   open.add(nk(name));render();
   toast('✔ '+fmt(sub)+' agregado a '+name);
   return true;
@@ -480,9 +505,9 @@ function card(x){
       .sort((a,b)=>b.date.localeCompare(a.date)||String(b.id).localeCompare(String(a.id)));
     const rows=mv.map(m=>{
       const del=`<button class="gh ${armed===m.id?'armed':''}" data-act="del" data-t="${m.t}" data-id="${m.id}">${armed===m.id?'¿Seguro?':'✕'}</button>`;
-      if(m.t==='p')return `<div class="mv"><div><b>Pago recibido</b><small>${fmtD(m.date)}</small></div><div class="amt p">− ${fmt(m.p.amount)}</div>${del}</div>`;
+      if(m.t==='p')return `<div class="mv"><div><b>Pago recibido</b><small>${fmtD(m.date)}${m.p.ts?' · '+hr(m.p.ts):''}</small></div><div class="amt p">− ${fmt(m.p.amount)}</div>${del}</div>`;
       const e=m.e;
-      return `<div class="mv"><div><b>${e.qty} × ${esc(e.prod)}${e.detail?' · '+esc(e.detail):''}</b><small>${fmtD(e.date)} · ${e.qty} × ${fmt(e.price)}</small></div><div class="amt">${fmt(e.sub)}</div>${del}</div>`}).join('');
+      return `<div class="mv"><div><b>${e.qty} × ${esc(e.prod)}${e.detail?' · '+esc(e.detail):''}</b><small>${fmtD(e.date)}${e.ts?' · '+hr(e.ts):''} · ${e.qty} × ${fmt(e.price)}</small></div><div class="amt">${fmt(e.sub)}</div>${del}</div>`}).join('');
     const pk='P'+x.k;
     body=`<div class="det"><div class="act">
       ${x.debt>0.004?`<button class="${addOpen.has(x.k)?'gh':''}" data-act="qtog" data-k="${esc(x.k)}">${addOpen.has(x.k)?'✕ Cerrar':'➕ Agregar más'}</button>`:''}
@@ -522,8 +547,9 @@ const nameOf=k=>(groups().find(x=>x.k===k)||{}).name;
 const debtOf=k=>(groups().find(x=>x.k===k)||{debt:0}).debt;
 function pay(k,amount){
   const name=nameOf(k);if(!name)return false;
-  const id=uid();
-  return commit({['pays/'+id]:{id,name,amount:r2(amount),date:today()}});
+  const id=uid(),rest=r2(debtOf(k)-amount);
+  lg('💵 Pago de '+name+': '+fmt(amount)+(rest>0.004?' (queda debiendo '+fmt(rest)+')':' (cuenta saldada)'));
+  return commit({['pays/'+id]:{id,name,amount:r2(amount),date:today(),ts:Date.now()}});
 }
 function onAct(ev){
   const b=ev.target.closest('[data-act]');if(!b)return;
@@ -547,6 +573,7 @@ function onAct(ev){
     case 'del':
       if(armed!==d.id){arm(d.id);break}
       {const u={[(d.t==='c'?'entries/':'pays/')+d.id]:null};if(d.t==='c')keepStock(u,S.entries.filter(e=>e.id===d.id));
+      {const o=(d.t==='c'?S.entries:S.pays).find(x=>x.id===d.id);if(o)lg(d.t==='c'?'🗑️ Crédito borrado de '+o.name+': '+o.qty+' × '+al(o.prod)+' = '+fmt(o.sub):'🗑️ Pago borrado de '+o.name+': '+fmt(o.amount))}
       armed=null;if(commit(u))toast('Borrado');break}
     case 'delp':{
       const pk='P'+k;if(armed!==pk){arm(pk);break}
@@ -555,6 +582,7 @@ function onAct(ev){
       /* Al borrar a la persona (deba o esté saldada) el stock NO debe subir: solo cambia cuando tú lo escribes.
          El stock disponible = stock base − vendido, por eso se baja el stock base lo mismo que se quita de lo vendido. */
       keepStock(u,mine);
+      lg('🗑️ Persona eliminada: '+nameOf(k)+' ('+mine.length+' créditos, '+S.pays.filter(p=>nk(p.name)===k).length+' pagos)');
       armed=null;if(commit(u)){open.delete(k);toast('Persona eliminada')}break}
   }
   render();
@@ -605,6 +633,7 @@ $('skrows').onclick=e=>{
   if(d){
     const g=S.gas.find(x=>x.id===d.dataset.gd);if(!g||!confirm('¿Quitar "'+g.name+'" de la lista?'))return;
     const keep=cap();delete keep[g.name];
+    lg('🗑️ Producto quitado: '+g.name);
     if(commit({['gas/'+g.id]:null,['stock/'+g.name]:null})){render();openStock(keep);toast('Producto quitado')}return}
   if(e.target.id!=='gadd')return;
   const cat=$('gc').value,name=cleanName($('gn').value),pr=parseFloat($('gpr').value),st=$('gst').value.trim();
@@ -614,17 +643,18 @@ $('skrows').onclick=e=>{
   const id=uid(),u={['gas/'+id]:{id,name,price:r2(pr),cat}};
   if(st!==''&&parseInt(st)>=0)u['stock/'+name]=parseInt(st)+sold(name);
   const keep=cap();
+  lg('➕ Producto nuevo: '+name+' ('+cat+') a '+fmt(pr)+(st!==''&&parseInt(st)>=0?', stock '+parseInt(st):''));
   if(commit(u)){render();openStock(keep);toast((CATE[cat]||'')+' '+name+' agregado')}
 };
 $('skno').onclick=()=>{$('skm').hidden=true};
 $('skok').onclick=()=>{
-  const u={},ren={};let n=0;
+  PEND=[];const u={},ren={};let n=0;
   for(const i of document.querySelectorAll('[data-gn]')){
     const base=i.dataset.gn==='@base',g=base?{name:gname()}:S.gas.find(x=>x.id===i.dataset.gn);if(!g)continue;
     const nn=cleanName(i.value);if(nn===g.name)continue;
-    if(!nn){toast('El nombre no puede quedar vacío');return}
-    if(ITEMS.some(p=>p.k!==g.name&&p.k.toLowerCase()===nn.toLowerCase())||RES().includes(nn.toLowerCase())){toast('Ya existe uno con el nombre "'+nn+'"');return}
-    ren[g.name]=nn;if(base)u.gname=nn;else u['gas/'+g.id]={...g,name:nn};n++;
+    if(!nn){toast('El nombre no puede quedar vacío');PEND=[];return}
+    if(ITEMS.some(p=>p.k!==g.name&&p.k.toLowerCase()===nn.toLowerCase())||RES().includes(nn.toLowerCase())){toast('Ya existe uno con el nombre "'+nn+'"');PEND=[];return}
+    lg('✏️ Producto renombrado: '+g.name+' → '+nn);ren[g.name]=nn;if(base)u.gname=nn;else u['gas/'+g.id]={...g,name:nn};n++;
     S.entries.filter(e=>al(e.prod)===g.name).forEach(e=>u['entries/'+e.id]={...e,prod:nn});
     S.sales.filter(e=>al(e.prod)===g.name).forEach(e=>u['sales/'+e.id]={...e,prod:nn});
     const sv=stk0(g.name);if(sv!=null){u['stock/'+nn]=sv;u['stock/'+g.name]=null;if(base&&S.stock['Gaseosas']!=null)u['stock/Gaseosas']=null}
@@ -633,15 +663,16 @@ $('skok').onclick=()=>{
     if(i.value.trim()==='')return;
     const v=parseInt(i.value);if(!(v>=0))return;
     const k=i.dataset.sk;if(left(k)===v)return;
-    const nk2=ren[k]||k;u['stock/'+nk2]=v+sold(k);n++;
+    const nk2=ren[k]||k;lg('📦 Stock de '+(ren[k]||k)+': '+left(k)+' → '+v);u['stock/'+nk2]=v+sold(k);n++;
   });
-  document.querySelectorAll('[data-gp]').forEach(i=>{const g=S.gas.find(x=>x.id===i.dataset.gp),v=parseFloat(i.value);if(g&&v>0&&r2(v)!==g.price){u['gas/'+g.id]={...(u['gas/'+g.id]||g),price:r2(v)};n++}});
+  document.querySelectorAll('[data-gp]').forEach(i=>{const g=S.gas.find(x=>x.id===i.dataset.gp),v=parseFloat(i.value);if(g&&v>0&&r2(v)!==g.price){lg('💲 Precio de '+g.name+': '+fmt(g.price)+' → '+fmt(v));u['gas/'+g.id]={...(u['gas/'+g.id]||g),price:r2(v)};n++}});
   document.querySelectorAll('[data-bp]').forEach(i=>{
     const b=i.dataset.bp,bs=BASE.find(x=>x.b===b);if(!bs)return;
     const v=i.value.trim()===''?null:parseFloat(i.value),eff=S.pr[b]!=null?S.pr[b]:bs.p;
-    if(v==null){if(S.pr[b]!=null){u['pr/'+b]=null;n++}}
-    else if(v>0&&r2(v)!==eff){u['pr/'+b]=r2(v);n++}
+    if(v==null){if(S.pr[b]!=null){lg('💲 Precio de '+bs.k+' vuelve al original');u['pr/'+b]=null;n++}}
+    else if(v>0&&r2(v)!==eff){lg('💲 Precio de '+(b==='@gas'?gname():bs.k)+': '+fmt(eff)+' → '+fmt(v));u['pr/'+b]=r2(v);n++}
   });
+  if(!n)PEND=[];
   if(n&&!commit(u))return;
   $('skm').hidden=true;render();if(n){drawProds();calc();toast('📦 Stock y precios guardados')}
 };
@@ -657,7 +688,7 @@ function drawCash(){
   $('cpv').textContent=q+' × '+fmt(pr);$('cst').textContent=fmt(q*pr);
   const td=S.sales.filter(x=>x.date===today()).sort((a,b)=>String(b.id).localeCompare(String(a.id)));
   $('ctot').textContent=td.length?td.reduce((a,x)=>a+x.qty,0)+' unidades · '+fmt(td.reduce((a,x)=>a+x.sub,0)):'Aún no hay ventas hoy';
-  $('clist').innerHTML=td.map(x=>`<div class="mv"><div><b>${x.qty} × ${esc(x.prod)}</b><small>${x.qty} × ${fmt(x.price)}</small></div><div class="amt p">${fmt(x.sub)}</div><button class="gh ${armed===x.id?'armed':''}" data-cd="${x.id}">${armed===x.id?'¿Seguro?':'✕'}</button></div>`).join('');
+  $('clist').innerHTML=td.map(x=>`<div class="mv"><div><b>${x.qty} × ${esc(x.prod)}</b><small>${x.ts?hr(x.ts)+' · ':''}${x.qty} × ${fmt(x.price)}</small></div><div class="amt p">${fmt(x.sub)}</div><button class="gh ${armed===x.id?'armed':''}" data-cd="${x.id}">${armed===x.id?'¿Seguro?':'✕'}</button></div>`).join('');
 }
 const pickC=e=>{const b=e.target.closest('[data-cp]');if(!b)return;let k=b.dataset.cp;if(k[0]==='@'){const c=k.slice(1),same=catOf(cprod)===c;cbOpen=same&&cbOpen===c?null:c;k=same?cprod:GROUP[c][0]}else if(b.closest('#cprods'))cbOpen=null;cprod=k;$('cp').value=pcVal(cprod);$('cp').readOnly=fixed(cprod);drawCash()};
 $('cprods').onclick=pickC;$('cbsub').onclick=pickC;
@@ -670,14 +701,15 @@ $('cadd').onclick=()=>{
   if(!(pr>0)){toast('Escribe el precio');$('cp').focus();return}
   const id=uid(),sub=r2(qty*pr);
   warnStock(cprod,qty);
-  if(!commit({['sales/'+id]:{id,prod:cprod,qty,price:r2(pr),sub,date:today()}}))return;
+  lg('💵 Venta al contado: '+qty+' × '+al(cprod)+' = '+fmt(sub));
+  if(!commit({['sales/'+id]:{id,prod:cprod,qty,price:r2(pr),sub,date:today(),ts:Date.now()}}))return;
   $('cq').value=1;render();toast('✔ Venta de '+fmt(sub)+' registrada');
 };
 $('clist').onclick=e=>{
   const b=e.target.closest('[data-cd]');if(!b)return;
   const id=b.dataset.cd;
   if(armed!==id){armed=id;clearTimeout(armT);armT=setTimeout(()=>{armed=null;drawCash()},3000);drawCash();return}
-  const u={['sales/'+id]:null};keepStock(u,S.sales.filter(x=>x.id===id));armed=null;if(commit(u))toast('Venta borrada');render();
+  const u={['sales/'+id]:null};keepStock(u,S.sales.filter(x=>x.id===id));{const o=S.sales.find(x=>x.id===id);if(o)lg('🗑️ Venta al contado borrada: '+o.qty+' × '+al(o.prod)+' = '+fmt(o.sub))}armed=null;if(commit(u))toast('Venta borrada');render();
 };
 
 /* ---------- respaldos en la nube ---------- */
@@ -687,6 +719,7 @@ function saveBk(tag,quiet,noPrune){
   if(!CLOUD){toast('☁️ Conecta la nube primero (⋯ Más → Clave de la nube)');return false}
   const id=uid(),u={['backups/'+id]:{ts:Date.now(),date:today(),tag:tag||'',n:S.entries.length+S.pays.length+S.sales.length,
     data:{entries:mapOf(S.entries),pays:mapOf(S.pays),sales:mapOf(S.sales),stock:{...S.stock},gas:mapOf(S.gas),pr:{...S.pr},gname:S.gname||'',cur:S.cur}}};
+  {const lx={id:uid()+'b',ts:Date.now(),txt:'☁️ Respaldo en la nube ('+(tag||'manual')+')'};u['log/'+lx.id]=lx}
   CLOUD.update(u);
   if(!quiet)toast('☁️ Respaldo guardado en la nube');
   return true;
@@ -711,9 +744,10 @@ $('bkl').onclick=e=>{
   const key=r?'R'+r.dataset.bkr:'D'+d.dataset.bkd;
   if(armed!==key){armed=key;clearTimeout(armT);armT=setTimeout(()=>{armed=null;drawBk()},3000);drawBk();return}
   armed=null;
-  if(d){if(CLOUD){CLOUD.update({['backups/'+d.dataset.bkd]:null});toast('Respaldo borrado')}drawBk();return}
+  if(d){if(CLOUD){lg('🗑️ Respaldo borrado de la nube');commit({['backups/'+d.dataset.bkd]:null});toast('Respaldo borrado')}drawBk();return}
   const b=BK.find(x=>x.id===r.dataset.bkr);if(!b)return;
   saveBk('antes de restaurar',true,true);
+  lg('♻️ Respaldo restaurado: '+new Date(b.ts).toLocaleString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}));
   const dt=b.data||{},u={};
   S.entries.forEach(x=>u['entries/'+x.id]=null);S.pays.forEach(x=>u['pays/'+x.id]=null);S.sales.forEach(x=>u['sales/'+x.id]=null);for(const k in S.stock)u['stock/'+k]=null;S.gas.forEach(x=>u['gas/'+x.id]=null);u.gname=null;
   Object.values(dt.entries||{}).forEach(x=>u['entries/'+x.id]=x);
@@ -779,6 +813,27 @@ function drawOv(){
 $('ov-t').onclick=()=>{ovMode='day';drawOv()};$('ov-a').onclick=()=>{ovMode='all';drawOv()};
 $('ovx').onclick=()=>{$('ov').hidden=true};
 
+/* ---------- vista de la bitácora ---------- */
+let lgMode='day';
+function lgList(){
+  const t=($('lgq').value||'').trim().toLowerCase();
+  return [...S.log].sort((a,b)=>b.ts-a.ts).filter(x=>(lgMode==='all'||dayOf(x.ts)===today())&&(!t||x.txt.toLowerCase().includes(t)));
+}
+function drawLg(){
+  $('lg-t').className=lgMode==='day'?'':'gh';$('lg-a').className=lgMode==='all'?'':'gh';
+  const l=lgList(),shown=l.slice(0,400);let last='',h='';
+  shown.forEach(x=>{const d=dayOf(x.ts);if(d!==last){last=d;h+='<div class="lgd">'+(d===today()?'Hoy · ':'')+fmtD(d)+'</div>'}
+    h+='<div class="lgr"><time>'+hrs(x.ts)+'</time><span>'+esc(x.txt)+'</span></div>'});
+  $('lgc').textContent=l.length+' acciones'+(l.length>shown.length?' (mostrando las últimas '+shown.length+')':'');
+  $('lgl').innerHTML=h||'<div class="empty">Aún no hay acciones'+(lgMode==='day'?' hoy':'')+'</div>';
+}
+$('lg-t').onclick=()=>{lgMode='day';drawLg()};$('lg-a').onclick=()=>{lgMode='all';drawLg()};
+$('lgq').oninput=drawLg;$('lgx').onclick=()=>{$('lg').hidden=true};
+$('lgd').onclick=()=>{
+  const rows=[['Fecha','Hora','Acción'],...lgList().map(x=>[fmtD(dayOf(x.ts)),hrs(x.ts),x.txt])];
+  dl('\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\r\n'),'bitacora-cuaderno-'+today()+'.csv','text/csv;charset=utf-8');toast('Bitácora exportada');
+};
+
 /* ---------- menú: resumen, CSV, respaldo ---------- */
 function dl(txt,name,type){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;
@@ -798,6 +853,7 @@ $('menu').onclick=async ev=>{
   const m=b.dataset.m;
   if(m==='cbk'){$('menu').open=false;drawBk();$('bk').hidden=false}
   else if(m==='ov'){$('menu').open=false;drawOv();$('ov').hidden=false}
+  else if(m==='log'){$('menu').open=false;drawLg();$('lg').hidden=false}
   else if(m==='sum'){toast(await copy(summary())?'Resumen copiado':'No se pudo copiar');$('menu').open=false}
   else if(m==='csv'){
     const rows=[['Fecha','Nombre','Tipo','Producto','Detalle','Cantidad','PrecioUnitario','Monto']];
@@ -816,6 +872,7 @@ $('menu').onclick=async ev=>{
     const u={};S.entries.forEach(e=>u['entries/'+e.id]=null);S.pays.forEach(p=>u['pays/'+p.id]=null);S.sales.forEach(x=>u['sales/'+x.id]=null);for(const k in S.stock)u['stock/'+k]=null;S.gas.forEach(x=>u['gas/'+x.id]=null);u.gname=null;
     armed=null;if(getClave()&&!CLOUD){toast('⏳ Conectando con la nube… intenta en un momento');b.classList.remove('armed');b.textContent='🗑️ Borrar todo';return}
     if(CLOUD&&(S.entries.length||S.pays.length||S.sales.length||Object.keys(S.stock).length))saveBk('antes de borrar todo',true);
+    lg('🗑️ Cuaderno borrado por completo');
     if(commit(u)){open.clear();toast(CLOUD?'Cuaderno vacío · respaldo guardado en la nube':'Cuaderno vacío')}render();$('menu').open=false;b.classList.remove('armed');b.textContent='🗑️ Borrar todo'}
 };
 $('file').onchange=e=>{
@@ -835,13 +892,14 @@ $('file').onchange=e=>{
       j.pays.forEach(p=>{const id=cid(p.id);u['pays/'+id]={...p,id}});
       for(const k in S.pr)u['pr/'+k]=null;if(j.pr&&typeof j.pr==='object')for(const k in j.pr)u['pr/'+k.replace(/[.$#\[\]\/]/g,'_')]=j.pr[k];
       u.cur=j.cur||'S/';
+      lg('♻️ Respaldo restaurado desde archivo ('+j.entries.length+' créditos, '+j.pays.length+' pagos)');
       if(commit(u)){drawProds();calc();$('cur').value=S.cur;render();toast('Respaldo restaurado');$('menu').open=false}
     }catch(x){toast('Ese archivo no es un respaldo válido')}
   };
   r.readAsText(f);e.target.value='';
 };
 $('cur').value=S.cur;
-$('cur').onchange=()=>{if(commit({cur:$('cur').value.trim()||'S/'})){drawProds();calc();render()}else $('cur').value=S.cur};
+$('cur').onchange=()=>{lg('💲 Símbolo de moneda cambiado a '+($('cur').value.trim()||'S/'));if(commit({cur:$('cur').value.trim()||'S/'})){drawProds();calc();render()}else $('cur').value=S.cur};
 
 /* ---------- pantallas completas ---------- */
 let full=null;
