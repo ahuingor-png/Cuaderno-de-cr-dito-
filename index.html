@@ -92,6 +92,9 @@ input[readonly]{opacity:.6;cursor:not-allowed}
 .ab{display:flex;gap:8px;margin-bottom:10px}.ab input{flex:1}.ab button{flex:none}
 .mv{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--ln)}
 .mv:last-child{border:0}
+.mv.past{opacity:.6}
+.hist{margin-top:10px;padding-top:8px;border-top:1px solid var(--ln);display:flex;flex-direction:column;gap:6px}
+.hist>button{align-self:flex-start}
 .mv>div:first-child{min-width:0}.mv b{font-weight:600;font-size:.9rem;display:block}
 .amt{font-weight:700;white-space:nowrap}.amt.p{color:var(--ok)}
 .empty{text-align:center;padding:30px 10px;color:var(--mut);border:1px dashed var(--ln);border-radius:18px}
@@ -348,7 +351,7 @@ function fixSel(){
   $('pc').readOnly=fixed(prod);if(fixed(prod))$('pc').value=pcVal(prod);
   if(!item(cprod))cprod='Refrescos';
   $('cp').readOnly=fixed(cprod);if(fixed(cprod))$('cp').value=pcVal(cprod)}
-let prod='Marcianos',open=new Set(),addOpen=new Set(),armed=null,armT,tt;
+let prod='Marcianos',open=new Set(),addOpen=new Set(),histOpen=new Set(),armed=null,armT,tt;
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2300)}
 function arm(id){armed=id;clearTimeout(armT);armT=setTimeout(()=>{armed=null;render()},3000)}
@@ -409,7 +412,7 @@ function onSnap(snap){
     }
   }
   S.entries=arr(v.entries);S.pays=arr(v.pays);S.sales=arr(v.sales);S.stock=v.stock||{};S.gas=arr(v.gas);S.pr=v.pr||{};S.gname=v.gname||'';S.cur=v.cur||'S/';S.log=arr(v.log);BK=arr(v.backups);
-  rebuild();fixSel();save();drawProds();calc();$('cur').value=S.cur;render();if(!$('bk').hidden)drawBk();if(!$('lg').hidden)drawLg();autoBk();
+  rebuild();fixSel();save();drawProds();calc();$('cur').value=S.cur;render();if(!$('bk').hidden)drawBk();if(!$('lg').hidden)drawLg();autoBk();autoClose();
 }
 
 async function initCloud(){
@@ -484,12 +487,31 @@ function add(){
   if(addEntry(name,prod,qty,pr,$('dt').value||today())){$('nm').value='';$('qt').value=0;$('pc').value=pcVal(prod);calc()}
 }
 
+/* ---------- cierre de ciclos (datos viejos) ----------
+   Cada vez que la cuenta de una persona llega a 0 (o queda en negativo por haber borrado cosas), todo lo anterior pasa a "historial". */
+function closeCycles(){
+  const u={},by=new Map();
+  const put=(x,t)=>{const k=nk(x.name);if(!by.has(k))by.set(k,[]);by.get(k).push({t,x,key:x.ts||Date.parse(x.date+'T12:00:00')||0})};
+  S.entries.filter(e=>!e.closed).forEach(e=>put(e,'c'));S.pays.filter(p=>!p.closed).forEach(p=>put(p,'p'));
+  by.forEach(l=>{
+    l.sort((a,b)=>a.key-b.key||(a.t==='c'?-1:1)-(b.t==='c'?-1:1));
+    let run=0,start=0;
+    l.forEach((m,i)=>{
+      run=r2(run+(m.t==='c'?m.x.sub:-m.x.amount));
+      if(run<=0.004){const c='m'+m.x.id;for(let j=start;j<=i;j++)u[(l[j].t==='c'?'entries/':'pays/')+l[j].x.id]={...l[j].x,closed:c};start=i+1;run=0}
+    });
+  });
+  return u;
+}
+function autoClose(){const u=closeCycles();if(Object.keys(u).length){lg('📜 Historial de cuentas saldadas separado de la deuda actual');if(commit(u))render()}}
+
 /* ---------- datos agrupados ---------- */
 function groups(){
   const m=new Map();
-  const g=n=>{const k=nk(n);if(!m.has(k))m.set(k,{k,name:clean(n),ent:[],pay:[],debt:0,units:0});return m.get(k)};
-  S.entries.forEach(e=>{const x=g(e.name);x.ent.push(e);x.debt+=e.sub;x.units+=e.qty});
-  S.pays.forEach(p=>{const x=g(p.name);x.pay.push(p);x.debt-=p.amount});
+  const g=n=>{const k=nk(n);if(!m.has(k))m.set(k,{k,name:clean(n),ent:[],pay:[],hent:[],hpay:[],debt:0,units:0,hunits:0});return m.get(k)};
+  /* Lo marcado como "closed" es el pasado (cuenta ya saldada): NO suma a la deuda actual. */
+  S.entries.forEach(e=>{const x=g(e.name);if(e.closed){x.hent.push(e);x.hunits+=e.qty}else{x.ent.push(e);x.debt+=e.sub;x.units+=e.qty}});
+  S.pays.forEach(p=>{const x=g(p.name);if(p.closed)x.hpay.push(p);else{x.pay.push(p);x.debt-=p.amount}});
   m.forEach(x=>x.debt=r2(x.debt));
   return [...m.values()];
 }
@@ -499,15 +521,25 @@ function card(x){
   const o=open.has(x.k);
   const ini=x.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
   const d=x.debt>0.004?`<small>Debe</small><b class="disp red">${fmt(x.debt)}</b>`:x.debt<-0.004?`<small>A favor</small><b class="disp">${fmt(-x.debt)}</b>`:`<span class="okc">Saldado ✓</span>`;
+  const hasOpen=x.ent.length>0||x.pay.length>0;
+  const sub=hasOpen?x.units+' productos · '+x.pay.length+' pagos':x.hunits+' productos · '+x.hpay.length+' pagos';
+  const rowsOf=(ents,pays,past)=>[...ents.map(e=>({t:'c',id:e.id,date:e.date,e})),...pays.map(p=>({t:'p',id:p.id,date:p.date,p}))]
+    .sort((a,b)=>b.date.localeCompare(a.date)||String(b.id).localeCompare(String(a.id)))
+    .map(m=>{
+      const del=`<button class="gh ${armed===m.id?'armed':''}" data-act="del" data-t="${m.t}" data-id="${m.id}">${armed===m.id?'¿Seguro?':'✕'}</button>`;
+      const cl=past?'mv past':'mv';
+      if(m.t==='p')return `<div class="${cl}"><div><b>Pago recibido</b><small>${fmtD(m.date)}${m.p.ts?' · '+hr(m.p.ts):''}</small></div><div class="amt p">− ${fmt(m.p.amount)}</div>${del}</div>`;
+      const e=m.e;
+      return `<div class="${cl}"><div><b>${e.qty} × ${esc(e.prod)}${e.detail?' · '+esc(e.detail):''}</b><small>${fmtD(e.date)}${e.ts?' · '+hr(e.ts):''} · ${e.qty} × ${fmt(e.price)}</small></div><div class="amt">${fmt(e.sub)}</div>${del}</div>`}).join('');
   let body='';
   if(o){
-    const mv=[...x.ent.map(e=>({t:'c',id:e.id,date:e.date,e})),...x.pay.map(p=>({t:'p',id:p.id,date:p.date,p}))]
-      .sort((a,b)=>b.date.localeCompare(a.date)||String(b.id).localeCompare(String(a.id)));
-    const rows=mv.map(m=>{
-      const del=`<button class="gh ${armed===m.id?'armed':''}" data-act="del" data-t="${m.t}" data-id="${m.id}">${armed===m.id?'¿Seguro?':'✕'}</button>`;
-      if(m.t==='p')return `<div class="mv"><div><b>Pago recibido</b><small>${fmtD(m.date)}${m.p.ts?' · '+hr(m.p.ts):''}</small></div><div class="amt p">− ${fmt(m.p.amount)}</div>${del}</div>`;
-      const e=m.e;
-      return `<div class="mv"><div><b>${e.qty} × ${esc(e.prod)}${e.detail?' · '+esc(e.detail):''}</b><small>${fmtD(e.date)}${e.ts?' · '+hr(e.ts):''} · ${e.qty} × ${fmt(e.price)}</small></div><div class="amt">${fmt(e.sub)}</div>${del}</div>`}).join('');
+    const rows=rowsOf(x.ent,x.pay,false);
+    const nh=x.hent.length+x.hpay.length;
+    let hist='';
+    if(nh){
+      const showH=!hasOpen||histOpen.has(x.k);
+      hist=`<div class="hist">${hasOpen?`<button class="gh" data-act="htog" data-k="${esc(x.k)}">${showH?'▾':'▸'} 📜 Historial anterior (${nh})</button>`:`<small>📜 Historial anterior (${nh})</small>`}${showH?`<button class="gh warn ${armed==='H'+x.k?'armed':''}" data-act="delh" data-k="${esc(x.k)}">${armed==='H'+x.k?'¿Seguro? Toca otra vez':'🗑️ Borrar historial anterior'}</button>`+rowsOf(x.hent,x.hpay,true):''}</div>`;
+    }
     const pk='P'+x.k;
     body=`<div class="det"><div class="act">
       ${x.debt>0.004?`<button class="${addOpen.has(x.k)?'gh':''}" data-act="qtog" data-k="${esc(x.k)}">${addOpen.has(x.k)?'✕ Cerrar':'➕ Agregar más'}</button>`:''}
@@ -515,14 +547,14 @@ function card(x){
       <button class="gh warn ${armed===pk?'armed':''}" data-act="delp" data-k="${esc(x.k)}">${armed===pk?'¿Seguro? Toca otra vez':'🗑️ Eliminar persona'}</button></div>
       ${x.debt>0.004&&addOpen.has(x.k)?qaHtml(x):''}
       ${x.debt>0.004?`<div class="ab"><input type="number" inputmode="decimal" min="0" step="0.1" placeholder="Abono parcial"><button data-act="part" data-k="${esc(x.k)}">Abonar</button></div>`:''}
-      ${rows||'<small>Sin movimientos</small>'}</div>`;
+      ${rows||(nh?'':'<small>Sin movimientos</small>')}${hist}</div>`;
   }
-  return `<div class="acc"><button class="hd" data-act="tg" data-k="${esc(x.k)}"><span class="who"><span class="av">${esc(ini)}</span><span style="min-width:0"><p>${esc(x.name)}</p><small>${x.units} productos · ${x.pay.length} pagos</small></span></span><span class="dbt">${d}</span></button>${body}</div>`;
+  return `<div class="acc"><button class="hd" data-act="tg" data-k="${esc(x.k)}"><span class="who"><span class="av">${esc(ini)}</span><span style="min-width:0"><p>${esc(x.name)}</p><small>${sub}</small></span></span><span class="dbt">${d}</span></button>${body}</div>`;
 }
 
 function render(){
   const gs=groups(),q=$('q').value.trim().toLowerCase();
-  const mk=t=>x=>!t||x.name.toLowerCase().includes(t)||x.ent.some(e=>(e.detail+' '+e.prod).toLowerCase().includes(t));
+  const mk=t=>x=>!t||x.name.toLowerCase().includes(t)||x.ent.concat(x.hent).some(e=>(e.detail+' '+e.prod).toLowerCase().includes(t));
   const match=mk(q);
   const owe=gs.filter(x=>x.debt>0.004).sort((a,b)=>b.debt-a.debt);
   const paid=gs.filter(x=>x.debt<=0.004).sort((a,b)=>a.name.localeCompare(b.name));
@@ -547,9 +579,15 @@ const nameOf=k=>(groups().find(x=>x.k===k)||{}).name;
 const debtOf=k=>(groups().find(x=>x.k===k)||{debt:0}).debt;
 function pay(k,amount){
   const name=nameOf(k);if(!name)return false;
-  const id=uid(),rest=r2(debtOf(k)-amount);
+  const id=uid(),rest=r2(debtOf(k)-amount),now=Date.now();
   lg('💵 Pago de '+name+': '+fmt(amount)+(rest>0.004?' (queda debiendo '+fmt(rest)+')':' (cuenta saldada)'));
-  return commit({['pays/'+id]:{id,name,amount:r2(amount),date:today(),ts:Date.now()}});
+  const u={['pays/'+id]:{id,name,amount:r2(amount),date:today(),ts:now}};
+  if(rest<=0.004){ /* cuenta saldada: todo lo anterior pasa al historial y ya no cuenta para futuros créditos */
+    const c=String(now);u['pays/'+id].closed=c;
+    S.entries.filter(e=>nk(e.name)===k&&!e.closed).forEach(e=>u['entries/'+e.id]={...e,closed:c});
+    S.pays.filter(p=>nk(p.name)===k&&!p.closed).forEach(p=>u['pays/'+p.id]={...p,closed:c});
+  }
+  return commit(u);
 }
 function onAct(ev){
   const b=ev.target.closest('[data-act]');if(!b)return;
@@ -557,6 +595,14 @@ function onAct(ev){
   switch(d.act){
     case 'tg':open.has(k)?open.delete(k):open.add(k);armed=null;break;
     case 'qtog':addOpen.has(k)?addOpen.delete(k):addOpen.add(k);break;
+    case 'htog':histOpen.has(k)?histOpen.delete(k):histOpen.add(k);break;
+    case 'delh':{
+      const hk='H'+k;if(armed!==hk){arm(hk);break}
+      const u={},me=S.entries.filter(e=>nk(e.name)===k&&e.closed),mp=S.pays.filter(p=>nk(p.name)===k&&p.closed);
+      me.forEach(e=>u['entries/'+e.id]=null);mp.forEach(p=>u['pays/'+p.id]=null);
+      keepStock(u,me);
+      lg('🗑️ Historial anterior borrado de '+nameOf(k)+' ('+me.length+' créditos, '+mp.length+' pagos)');
+      armed=null;if(commit(u))toast('Historial anterior borrado');break}
     case 'qm':case 'qp':{const n=b.closest('.qty').querySelector('input');n.value=Math.max(1,(parseInt(n.value)||1)+(d.act==='qp'?1:-1));return}
     case 'qadd':{
       const q=b.closest('.qa'),pd=q.querySelector('[data-qp]').value,qty=parseInt(q.querySelector('[data-qq]').value);
@@ -764,8 +810,8 @@ $('bkl').onclick=e=>{
 /* Un crédito cuenta como venta del día si se dio hoy Y quedó cubierto con pagos de hoy (los pagos cubren primero lo más antiguo). */
 function paidSameDay(day){
   const by=new Map(),out=[];
-  S.entries.forEach((e,i)=>{const k=nk(e.name);if(!by.has(k))by.set(k,{e:[],p:[]});by.get(k).e.push({e,i})});
-  S.pays.forEach((p,i)=>{const k=nk(p.name);if(!by.has(k))by.set(k,{e:[],p:[]});by.get(k).p.push({p,i})});
+  S.entries.forEach((e,i)=>{const k=nk(e.name)+'|'+(e.closed||'');if(!by.has(k))by.set(k,{e:[],p:[]});by.get(k).e.push({e,i})});
+  S.pays.forEach((p,i)=>{const k=nk(p.name)+'|'+(p.closed||'');if(!by.has(k))by.set(k,{e:[],p:[]});by.get(k).p.push({p,i})});
   by.forEach(g=>{
     const es=g.e.sort((a,b)=>String(a.e.date).localeCompare(String(b.e.date))||a.i-b.i);
     const ps=g.p.sort((a,b)=>String(a.p.date).localeCompare(String(b.p.date))||a.i-b.i);
@@ -923,7 +969,7 @@ document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement
 /* ---------- inicio ---------- */
 $('dt').value=today();$('pc').value=pcVal(prod);$('pc').readOnly=fixed(prod);
 drawProds();calc();render();
-if(getClave())initCloud();else if(lsGet(LOC)){setNet('local');hideSplash()}else{setNet('local');openGate();hideSplash()}
+if(getClave())initCloud();else if(lsGet(LOC)){setNet('local');hideSplash();autoClose()}else{setNet('local');openGate();hideSplash()}
 setTimeout(hideSplash,7000);
 
 /* ---------- logo incrustado: la app se instala con el logo aunque solo subas este archivo ---------- */
